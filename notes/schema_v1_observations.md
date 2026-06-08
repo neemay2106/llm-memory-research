@@ -50,3 +50,18 @@ rely on which libraries.
 4. Add explicit lookback instruction in system prompt
 5. Consider artifact node type — decide in Week 2 runs whether it gets populated
 6. Clarify task_state nodes must be connected to surrounding decisions
+
+## Fixes for schema V2
+
+| Problem | Fix in Schema v2 |
+|----------|------------------|
+| `"implements"` used as default | Add one concrete example per relationship type in `link_nodes` description. |
+| Recency bias / missed cross-turn edges | Add explicit lookback instruction to system prompt after every two nodes recorded. |
+| Illogical closing edges | Add instruction: do not create edges to or from `task_state` nodes except `follows`. |
+| Disconnected `task_state` nodes | System prompt: each `task_state` node must link via `follows` to the decision that preceded it. |
+| Orphaned constraint nodes | System prompt: every constraint node must have at least one edge before proceeding. |
+| No artifact nodes | Add `artifact` node type and `produces` relationship type in `link_nodes`. |
+| Missing `follows` relationship | Add `follows` to valid relationship types. |
+| Dependencies vague | Make `dependencies` required on decision nodes; add one-line description per library or dependency. |
+| Wrong edge direction | Add instruction: decisions create constraints, so edge direction should be `decision → constraint`, not the reverse. |
+| Missing resolution tracking | Add instruction: every constraint node must eventually have an incoming `fixes` or `implements` edge. |
