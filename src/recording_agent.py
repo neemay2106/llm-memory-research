@@ -1,12 +1,33 @@
 import anthropic
 import os
 from dotenv import load_dotenv
+
 os.environ.pop("ANTHROPIC_API_KEY", None)
 load_dotenv(override=True)
 
 api_key = os.getenv("ANTHROPIC_API_KEY")
 
-client = anthropic.Anthropic(api_key= api_key)
+client = anthropic.Anthropic(api_key=api_key)
+
+description_for_relationship_type = """follows
+Indicates temporal/logical sequencing — the source node occurs or is decided after the target, with no direct causal dependency. Example: write_unit_tests follows finalize_api_schema.
+produces
+The source node (a decision or process) generates the target node as an output artifact. Example: run_codegen_step produces types.gen.ts.
+was_constrained_by
+The source node's form or outcome was shaped or bounded by the target constraint. Example: use_sqlite was_constrained_by no_external_services_policy.
+depends_on
+The source cannot proceed or function correctly without the target being complete or available. Example: integration_tests depends_on mock_server_setup.
+implements
+The source is a concrete realization of an abstract spec, plan, or interface defined by the target. Example: JWTAuthMiddleware implements auth_spec.
+abandoned_because_of
+The source decision or path was discarded due to the target node (a blocker, constraint, or failure). Example: graphql_approach abandoned_because_of schema_complexity_blocker.
+fixes
+The source artifact or decision resolves a defect or broken state represented by the target. Example: null_guard_patch fixes null_deref_in_parser.
+passes_data_to
+The source node emits data that the target node consumes at runtime or during execution. Example: csv_parser passes_data_to validation_layer.
+optimizes
+The source improves the performance, quality, or resource usage of the target without changing its interface or correctness. Example: composite_index_on_user_id optimizes user_lookup_query
+ """
 
 tools = [
     {
@@ -18,10 +39,11 @@ tools = [
                 "node_id": {"type": "string", "description": "unique id e.g. node_001"},
                 "description": {"type": "string", "description": "what is being changed and where"},
                 "rationale": {"type": "string", "description": "why this decision was made"},
-                "dependencies": {"type": "array", "items": {"type": "string"}, "description": "libraries or functions this relies on"},
-                "task_state": {"type": "string", "description": "overall task completion status right now"}
+                "dependencies": {"type": "array", "items": {"type": "string"},
+                                 "description": "libraries or functions this relies on, with one-line description of what each contributes"},
+                "task_state": {"type": "string", "description": "brief summary of overall status"}
             },
-            "required": ["node_id", "description", "rationale", "task_state"]
+            "required": ["node_id", "description", "rationale", "task_state"],
         }
     },
     {
@@ -31,25 +53,35 @@ tools = [
             "type": "object",
             "properties": {
                 "node_id": {"type": "string", "description": "unique id e.g. node_002"},
-                "description": {"type": "string", "description": "what the constraint is"},
-                "rationale": {"type": "string", "description": "why this is a constraint"},
-                "task_state": {"type": "string", "description": "overall task completion status right now"}
+                "constraint_type": {"type": "string",
+                                    "enum": ["performance", "memory", "dependency", "security", "architectural",
+                                             "other"]},
+                "severity": {"type": "string", "enum": ["blocking", "high", "moderate", "informational"]},
+                "status": {"type": "string", "enum": ["open", "mitigated", "resolved", "wont_fix"]},
+                "description": {"type": "string", "description": "Clear statement of the limitation"},
+                "rationale": {"type": "string",
+                              "description": "Technical justification for why this constraint exists"},
+                "source": {"type": "string",
+                           "description": "whats the source of the constrain ex user_prompt, environment_limitation, library_conflict"},
             },
-            "required": ["node_id", "description", "rationale", "task_state"]
+            "required": ["node_id", "constraint_type", "severity", "status", "description", "rationale", "source"],
         }
     },
     {
-        "name": "record_task_state",
-        "description": "Records the current state of the overall task.",
+        "name": "record_artifact",
+        "description": "Records output at a certain decsion during the coding task.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "node_id": {"type": "string", "description": "unique id e.g. node_003"},
-                "current_task": {"type": "string", "description": "what is being worked on right now"},
-                "completion_pct": {"type": "number", "description": "estimated completion 0.0 to 1.0"},
-                "task_state": {"type": "string", "description": "brief summary of overall status"}
+                "node_id": {"type": "string", "description": "unique id e.g. node_002"},
+                "description": {"type": "string", "description": "what the artifact is"},
+                "type": {"type": "string",
+                         "description": "type of artifact,eg:File, patch, test, model, config, document, dataset, diagram"},
+                "output_summary": {"type": "string", "description": "summary of generated output"},
+                "location": {"type": "string", "description": "location of the artifact"},
+                "produced_by": {"type": "string", "description": "node_id of the decision that produced this artifact"},
             },
-            "required": ["node_id", "current_task", "completion_pct", "task_state"]
+            "required": ["node_id", "description", "type", "output_summary", "location", "produced_by"]
         }
     },
     {
@@ -61,60 +93,79 @@ tools = [
                 "edge_id": {"type": "string", "description": "unique id e.g. edge_001"},
                 "source_node_id": {"type": "string", "description": "node the edge starts from"},
                 "target_node_id": {"type": "string", "description": "node the edge points to"},
-                "relationship_type": {"type": "string", "description": "one of: depends_on, was_constrained_by, implements, abandoned_because_of, fixes, passes_data_to, optimizes"},
-                "passed_context": {"type": "string", "description": "specific data or state passed from source to target"}
+                "relationship_type": {"type": "string", "description": description_for_relationship_type},
+                "rationale": {"type": "string",
+                              "description": "Technical justification for why this connection was made"},
+                "passed_context": {"type": "string",
+                                   "description": "specific data or state passed from source to target"}
             },
-            "required": ["edge_id", "source_node_id", "target_node_id", "relationship_type","passed_context"]
+            "required": ["edge_id", "source_node_id", "target_node_id", "relationship_type", "rationale"]
         }
-    }
+    },
 ]
 
+graph = {
+    "task_metadata": {
+        "current_task": "",
+        "completion_pct": 0.0,
+        "status": ""
+    },
+    "nodes": [],
+    "edges": []
+}
 
-graph = {"nodes": [], "edges": []}
 
 def handle_tool_call(tool_name, tool_input):
     if tool_name == "record_decision":
         graph["nodes"].append({"type": "decision", **tool_input})
+        graph["task_metadata"]["current_task"] = tool_input["description"]
+        graph["task_metadata"]["status"] = tool_input["task_state"]
         print(f"NODE recorded: {tool_input['node_id']} — {tool_input['description'][:60]}")
     elif tool_name == "record_constraint":
         graph["nodes"].append({"type": "constraint", **tool_input})
         print(f"CONSTRAINT recorded: {tool_input['node_id']} — {tool_input['description'][:60]}")
-    elif tool_name == "record_task_state":
-        graph["nodes"].append({"type": "task_state", **tool_input})
-        print(f"TASK STATE recorded: {tool_input['completion_pct']*100:.0f}% — {tool_input['current_task'][:60]}")
     elif tool_name == "link_nodes":
         graph["edges"].append(tool_input)
-        print(f"EDGE recorded: {tool_input['source_node_id']} --{tool_input['relationship_type']}--> {tool_input['target_node_id']}")
+        print(
+            f"EDGE recorded: {tool_input['source_node_id']} --{tool_input['relationship_type']}--> {tool_input['target_node_id']}")
+    elif tool_name == "record_artifact":
+        graph["nodes"].append({"type": "artifact", **tool_input})
+        print(f"ARTIFACT recorded: {tool_input['node_id']} — {tool_input['description'][:60]}")
     return {"status": "recorded"}
 
 
-
 message = [
+
         {
             "role": "user",
-            "content": """You are a coding agent. As you work, you MUST use your tools to record every decision, constraint, and task state change in real time.
-                        Rules:
-                        - Call record_decision every time you decide something about the code
-                        - Call record_constraint every time you hit a limitation or requirement
-                        - Call record_task_state at the start and after each major step
-                        - Call link_nodes after recording two related nodes
-                        - Use sequential IDs: node_001, node_002, edge_001, edge_002
-                        
-                        Do not wait until the end. Record as you go.
-                        
-                        Build a rate limiter class that limits API calls to N requests per minute.
-                        
-                        """
+            "content": """You are a coding agent. As you work, you MUST use your tools to record every decision, constraint, and artifact in real time.
+        
+        Rules:
+        - Call record_decision every time you decide something about the code
+        - Call record_constraint every time you discover a limitation or requirement
+        - Call record_artifact every time you produce a concrete output (function, class, file, config)
+        - Call link_nodes after every two recorded nodes — look back at ALL previously recorded node IDs, not just the most recent ones
+        - Use sequential IDs: node_001, node_002, edge_001, edge_002
+        
+        Linking rules:
+        - Every constraint node must have at least one edge before you continue
+        - Never create an edge without filling in the rationale field explaining why the connection exists
+        - Do not create edges between unrelated nodes just to fill gaps
+        
+        Do not wait until the end. Record as you go.
+        
+        Build a rate limiter class that limits API calls to N requests per minute.
+        """
         }
-    ]
+
+]
 response = client.messages.create(
     model="claude-haiku-4-5",
     max_tokens=4096,
     tools=tools,
     tool_choice={"type": "auto", "disable_parallel_tool_use": True},
-    messages= message,
+    messages=message,
 )
-
 
 while response.stop_reason == "tool_use":
     tool_results = []
@@ -139,9 +190,6 @@ while response.stop_reason == "tool_use":
     )
 
 import json
+
 print("\n--- FULL GRAPH ---")
 print(json.dumps(graph, indent=2))
-
-
-
-
