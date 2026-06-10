@@ -67,9 +67,8 @@ def run_recording_agent(original_task):
                         "dependencies": {"type": "array", "items": {"type": "string"},
                                          "description": "libraries or functions this relies on, with one-line description of what each contributes"},
                         "task_state": {"type": "string", "description": "brief summary of overall status"},
-                        "completion_pct": {"type": "number", "description": "estimated task completion 0.0 to 1.0"}
                     },
-                    "required": ["node_id", "description", "rationale", "task_state","completion_pct"],
+                    "required": ["node_id", "description", "rationale", "task_state",],
                 }
             },
             {
@@ -154,6 +153,8 @@ def run_recording_agent(original_task):
                 - Call record_artifact every time you produce a concrete output (function, class, file, config)
                 - Call link_nodes after every two recorded nodes — look back at ALL previously recorded node IDs, not just the most recent ones
                 - Use sequential IDs: node_001, node_002, edge_001, edge_002
+                - After recording each decision node, call link_nodes with relationship_type "follows" 
+                  to connect it to the previous decision node
                 
                 Linking rules:
                 - Every constraint node must have at least one edge before you continue
