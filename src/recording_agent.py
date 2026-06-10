@@ -186,8 +186,12 @@ def run_recording_agent(original_task):
                         "content": '{"status": "recorded"}'
                     })
 
+
             message.append({"role": "assistant", "content": response.content})
             message.append({"role": "user", "content": tool_results})
+
+            if graph["task_metadata"]["completion_pct"] >= 0.5:
+                break
 
             response = client.messages.create(
                 model="claude-haiku-4-5",
@@ -196,6 +200,7 @@ def run_recording_agent(original_task):
                 tool_choice={"type": "auto", "disable_parallel_tool_use": True},
                 messages=message,
             )
+
 
         from handoff_generator import generate_handoff
         return graph,generate_handoff(graph,original_task)

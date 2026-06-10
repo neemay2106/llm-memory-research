@@ -28,6 +28,17 @@ def run_receiving_agent(handoff_document, original_task):
             Read the handoff document in full before doing anything else.
             </ground_truth>
             
+            
+             <graph_reasoning>
+            The handoff document contains structured nodes with IDs and edges between them.
+            Before implementing anything:
+            - Identify which constraints are still open and their severity
+            - Trace the edges to understand which decisions are connected
+            - If you make an implementation choice, identify which node it relates to
+            - If a constraint has severity "high" or "blocking", it must be addressed before continuing
+            </graph_reasoning>
+            
+            
             <constraints>
             The following are non-negotiable.
             
@@ -84,9 +95,6 @@ def run_receiving_agent(handoff_document, original_task):
               5. Proceed from the documented continuation point.
             </startup_sequence>
             
-            <handoff_document>
-            {handoff_document}
-            </handoff_document>
     
     """
 
@@ -100,6 +108,7 @@ def run_receiving_agent(handoff_document, original_task):
     response = client.messages.create(
         model="claude-haiku-4-5",
         max_tokens=4096,
+        system = system_prompt,
         messages=messages,
     )
 
