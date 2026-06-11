@@ -1,0 +1,226 @@
+# Startup Confirmation
+
+I am continuing the implementation of an **LRU cache with get and put operations**. The previous work established the architectural decisions (HashMap + Doubly Linked List) and designed both the `get()` and `put()` methods. I am now at the point where I must **implement the put(key, value) method with eviction logic**, which is the final incomplete component. The immediate next action is to write the complete, working implementation of both the LRU cache class and the put method that handles all three cases: key exists, key doesn't exist under capacity, and key doesn't exist at capacity (requiring eviction).
+
+---
+
+# Graph Reasoning & Constraint Analysis
+
+**Edge Analysis:**
+- **edge_001** (node_001 → node_002): The HashMap + Doubly Linked List architecture is **constrained by** the capacity limit. This means the put method *must* enforce the capacity constraint and evict when full.
+
+**Open Constraint Status:**
+- **node_002** (BLOCKING): "LRU cache must respect a fixed capacity limit" — This is blocking and must be actively enforced in the put method implementation. Every insertion at capacity must trigger eviction of the LRU (back) node.
+
+**Decision Status:**
+- node_001: Architecture chosen ✓
+- node_003: get() design defined ✓
+- node_004: put() design defined (but not yet implemented) ← **This is where I start**
+
+---
+
+# Implementation
+
+```python
+class Node:
+    """Node in the doubly linked list."""
+    def __init__(self, key, value):
+        self.key = key
+        self.value = value
+        self.prev = None
+        self.next = None
+
+
+class LRUCache:
+    """
+    LRU Cache implementation using HashMap + Doubly Linked List.
+    
+    Time Complexity:
+    - get(key): O(1)
+    - put(key, value): O(1)
+    
+    Space Complexity: O(capacity)
+    """
+    
+    def __init__(self, capacity: int):
+        """
+        Initialize LRU cache with a given capacity.
+        
+        Args:
+            capacity: Fixed capacity limit for the cache
+        
+        Raises:
+            ValueError: If capacity is less than 1
+        """
+        if capacity < 1:
+            raise ValueError("Capacity must be at least 1")
+        
+        self.capacity = capacity
+        self.cache = {}  # HashMap: key -> Node
+        
+        # Dummy nodes for doubly linked list
+        # Front (after head) = most recently used
+        # Back (before tail) = least recently used
+        self.head = Node(0, 0)
+        self.tail = Node(0, 0)
+        self.head.next = self.tail
+        self.tail.prev = self.head
+    
+    def _remove_node(self, node: Node) -> None:
+        """Remove a node from the doubly linked list."""
+        prev_node = node.prev
+        next_node = node.next
+        prev_node.next = next_node
+        next_node.prev = prev_node
+    
+    def _add_to_front(self, node: Node) -> None:
+        """Add a node to the front (right after head) of the doubly linked list."""
+        node.next = self.head.next
+        node.prev = self.head
+        self.head.next.prev = node
+        self.head.next = node
+    
+    def get(self, key: int) -> int:
+        """
+        Retrieve the value associated with the key.
+        Marks the accessed item as most recently used.
+        
+        Args:
+            key: The key to retrieve
+        
+        Returns:
+            The value associated with key, or -1 if key does not exist
+        """
+        if key not in self.cache:
+            return -1
+        
+        node = self.cache[key]
+        # Move accessed node to front (most recently used)
+        self._remove_node(node)
+        self._add_to_front(node)
+        
+        return node.value
+    
+    def put(self, key: int, value: int) -> None:
+        """
+        Insert or update a key-value pair in the cache.
+        
+        Handles three cases:
+        1. Key exists: Update value and move to front
+        2. Key doesn't exist, under capacity: Add to front
+        3. Key doesn't exist, at capacity: Evict LRU (back) node, then add to front
+        
+        Args:
+            key: The key to insert or update
+            value: The value to associate with the key
+        
+        Enforces the capacity constraint by evicting the least recently used item
+        when the cache is at capacity.
+        """
+        # Case 1: Key already exists - update value and move to front
+        if key in self.cache:
+            node = self.cache[key]
+            node.value = value
+            self._remove_node(node)
+            self._add_to_front(node)
+            return
+        
+        # Case 2 & 3: Key doesn't exist
+        # Check if we need to evict (Case 3)
+        if len(self.cache) >= self.capacity:
+            # Evict the least recently used item (node before tail)
+            lru_node = self.tail.prev
+            self._remove_node(lru_node)
+            del self.cache[lru_node.key]
+        
+        # Add new node to front (most recently used)
+        new_node = Node(key, value)
+        self.cache[key] = new_node
+        self._add_to_front(new_node)
+
+
+# Test Cases
+if __name__ == "__main__":
+    # Test 1: Basic get and put
+    print("Test 1: Basic get and put")
+    lru = LRUCache(2)
+    lru.put(1, 1)
+    lru.put(2, 2)
+    assert lru.get(1) == 1
+    print("✓ Stored and retrieved value")
+    
+    # Test 2: Eviction when at capacity
+    print("\nTest 2: Eviction at capacity")
+    lru = LRUCache(2)
+    lru.put(1, 1)
+    lru.put(2, 2)
+    lru.put(3, 3)  # Evicts key 1 (least recently used)
+    assert lru.get(1) == -1, "Key 1 should be evicted"
+    assert lru.get(2) == 2, "Key 2 should exist"
+    assert lru.get(3) == 3, "Key 3 should exist"
+    print("✓ LRU eviction working correctly")
+    
+    # Test 3: Update existing key
+    print("\nTest 3: Update existing key")
+    lru = LRUCache(2)
+    lru.put(1, 1)
+    lru.put(2, 2)
+    lru.put(1, 10)  # Update key 1
+    assert lru.get(1) == 10, "Value should be updated"
+    assert lru.get(2) == 2, "Key 2 should still exist"
+    print("✓ Key update working correctly")
+    
+    # Test 4: Accessing a key marks it as recently used
+    print("\nTest 4: Access marking as recently used")
+    lru = LRUCache(2)
+    lru.put(1, 1)
+    lru.put(2, 2)
+    lru.get(1)  # Access key 1, making it recently used
+    lru.put(3, 3)  # Should evict key 2 (now the LRU), not key 1
+    assert lru.get(1) == 1, "Key 1 should exist"
+    assert lru.get(2) == -1, "Key 2 should be evicted"
+    assert lru.get(3) == 3, "Key 3 should exist"
+    print("✓ Access correctly updates recency ordering")
+    
+    # Test 5: Single capacity cache
+    print("\nTest 5: Single capacity cache")
+    lru = LRUCache(1)
+    lru.put(1, 1)
+    assert lru.get(1) == 1
+    lru.put(2, 2)
+    assert lru.get(1) == -1, "Key 1 should be evicted"
+    assert lru.get(2) == 2, "Key 2 should exist"
+    print("✓ Single capacity cache working correctly")
+    
+    print("\n✅ All tests passed!")
+```
+
+---
+
+# Implementation Summary
+
+**What was implemented:**
+
+1. **Node class**: Represents a doubly linked list node with key, value, and pointers
+2. **LRUCache class**:
+   - `__init__`: Initializes with capacity, HashMap (dict), and dummy head/tail nodes
+   - `_remove_node`: Removes node from linked list in O(1)
+   - `_add_to_front`: Adds node to front (most recently used position) in O(1)
+   - `get(key)`: Returns value, marks as recently used, returns -1 if not found
+   - `put(key, value)`: Handles all three cases defined in node_004
+     - **Case 1** (key exists): Update value and move to front
+     - **Case 2** (key doesn't exist, under capacity): Add to front
+     - **Case 3** (key doesn't exist, at capacity): Evict LRU (back node), then add to front
+
+**Constraint Compliance:**
+
+✅ **node_002 (blocking)**: Capacity constraint is actively enforced in put() — when `len(self.cache) >= self.capacity`, the LRU node (at back of linked list) is evicted before insertion.
+
+✅ **edge_001**: The architecture respects the constraint — HashMap enables O(1) lookups, doubly linked list enables O(1) eviction of the back node.
+
+**Time & Space Complexity:**
+- `get(key)`: O(1)
+- `put(key, value)`: O(1)
+- Space: O(capacity)
+
+All test cases pass and validate the complete LRU cache implementation.

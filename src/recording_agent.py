@@ -18,7 +18,8 @@ def handle_tool_call(graph,tool_name, tool_input):
         graph["nodes"].append({"type": "decision", **tool_input})
         graph["task_metadata"]["current_task"] = tool_input["description"]
         graph["task_metadata"]["status"] = tool_input["task_state"]
-        graph["task_metadata"]["completion_pct"] = tool_input["completion_pct"]
+        if "completion_pct" in tool_input:
+            graph["task_metadata"]["completion_pct"] = tool_input["completion_pct"]
         print(f"NODE recorded: {tool_input['node_id']} — {tool_input['description'][:60]}")
     elif tool_name == "record_constraint":
         graph["nodes"].append({"type": "constraint", **tool_input})
@@ -146,25 +147,25 @@ def run_recording_agent(original_task):
 
                 {
                     "role": "user",
-                    "content": f"""You are a coding agent. As you work, you MUST use your tools to record every decision, constraint, and artifact in real time.
-                Rules:
-                - Call record_decision every time you decide something about the code
-                - Call record_constraint every time you discover a limitation or requirement
-                - Call record_artifact every time you produce a concrete output (function, class, file, config)
-                - Call link_nodes after every two recorded nodes — look back at ALL previously recorded node IDs, not just the most recent ones
-                - Use sequential IDs: node_001, node_002, edge_001, edge_002
-                - After recording each decision node, call link_nodes with relationship_type "follows" 
-                  to connect it to the previous decision node
-                
-                Linking rules:
-                - Every constraint node must have at least one edge before you continue
-                - Never create an edge without filling in the rationale field explaining why the connection exists
-                - Do not create edges between unrelated nodes just to fill gaps
-                
-                Do not wait until the end. Record as you go.
-                
-                {original_task}
-                """
+                    "content": f"""You are a coding agent. Your job is to complete the coding task below.
+                    As you work on the TASK, use your tools to record every decision you make about the code.
+                    
+                    Do NOT record decisions about the recording system or workflow initialization.
+                    Only record decisions directly related to solving the TASK.
+                    
+                    TASK: {original_task}
+                    
+                    Rules:
+                    - Call record_decision every time you decide something about the code
+                    - Call record_constraint every time you discover a limitation or requirement  
+                    - Call record_artifact every time you produce a concrete output
+                    - Call link_nodes after every two recorded nodes
+                    - Use sequential IDs: node_001, node_002, edge_001, edge_002
+                    - Every constraint must have at least one edge
+                    - Never create an edge without a rationale
+                    
+                    Do not wait until the end. Record as you go.
+                    """
                 }
 
         ]
@@ -172,10 +173,11 @@ def run_recording_agent(original_task):
             model="claude-haiku-4-5",
             max_tokens=4096,
             tools=tools,
-            tool_choice={"type": "auto", "disable_parallel_tool_use": True},
+            tool_choice={"type": "any", "disable_parallel_tool_use": True},
             messages=message,
         )
 
+        turn_count = 0
         while response.stop_reason == "tool_use":
             tool_results = []
             for block in response.content:
@@ -191,7 +193,8 @@ def run_recording_agent(original_task):
             message.append({"role": "assistant", "content": response.content})
             message.append({"role": "user", "content": tool_results})
 
-            if graph["task_metadata"]["completion_pct"] >= 0.5:
+            turn_count += 1
+            if turn_count >= 6:
                 break
 
             response = client.messages.create(
@@ -202,6 +205,8 @@ def run_recording_agent(original_task):
                 messages=message,
             )
 
-
+        import json
+        print("\n--- RAW GRAPH ---")
+        print(json.dumps(graph, indent=2))
         from handoff_generator import generate_handoff
         return graph,generate_handoff(graph,original_task)

@@ -29,11 +29,12 @@ def run_receiving_agent(handoff_document, original_task):
             </ground_truth>
             
             
-             <graph_reasoning>
+            <graph_reasoning>
             The handoff document contains structured nodes with IDs and edges between them.
             Before implementing anything:
             - Identify which constraints are still open and their severity
             - Trace the edges to understand which decisions are connected
+            - Explicitly walk each edge in the KEY EDGES section and state what inference you draw from each connection
             - If you make an implementation choice, identify which node it relates to
             - If a constraint has severity "high" or "blocking", it must be addressed before continuing
             </graph_reasoning>
@@ -113,6 +114,7 @@ def run_receiving_agent(handoff_document, original_task):
     )
 
     print(response.content[0].text)
+    return response.content[0].text
 
 
 if __name__ == "__main__":

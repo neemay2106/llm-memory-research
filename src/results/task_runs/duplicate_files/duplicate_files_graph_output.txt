@@ -1,0 +1,140 @@
+# Startup Sequence
+
+## Confirmation
+I am continuing work on a function that finds duplicate files in a directory by content hash. The previous agent established a memory-efficient hashing strategy using hashlib with 8KB chunked file reading and os.walk() for directory traversal. I am starting from the implementation phase, where the architectural decisions are complete but no code has been written yet (0% completion). My immediate next action is to implement the core function with all three established decisions integrated.
+
+## Edge Analysis
+
+**edge_002**: `node_004 -----was_constrained_by-----> node_003`
+- **Inference**: The chunked reading decision (node_004) was shaped by an implicit memory constraint (node_003). This means the 8KB chunk size is not arbitrary—it exists to satisfy a memory efficiency requirement. I must preserve this constraint in my implementation.
+
+## Decision Continuity Check
+- ✅ **node_001** (hashlib + SHA256): Will use in hashing logic
+- ✅ **node_002** (os.walk()): Will use for directory traversal
+- ✅ **node_004** (8KB chunks): Will use in file reading loop
+- ✅ No open constraints or blocking issues
+
+---
+
+# Implementation
+
+I will now implement the complete function following all established decisions:
+
+```python
+import hashlib
+import os
+from collections import defaultdict
+from pathlib import Path
+
+
+def find_duplicate_files(directory_path):
+    """
+    Find all duplicate files in a directory based on content hash.
+    
+    Uses hashlib (SHA256) with chunked file reading (8KB) to efficiently
+    handle large files without consuming excessive memory.
+    
+    Args:
+        directory_path (str or Path): Root directory to scan for duplicates
+        
+    Returns:
+        dict: Mapping of file hash -> list of file paths with that hash.
+              Only hashes with 2+ files are included.
+              
+    Raises:
+        ValueError: If directory_path does not exist or is not a directory
+    """
+    directory_path = Path(directory_path)
+    
+    # Validate input
+    if not directory_path.exists():
+        raise ValueError(f"Directory does not exist: {directory_path}")
+    if not directory_path.is_dir():
+        raise ValueError(f"Path is not a directory: {directory_path}")
+    
+    # Dictionary to accumulate hashes -> file paths
+    hash_to_files = defaultdict(list)
+    
+    # os.walk() traversal (node_002)
+    for dirpath, dirnames, filenames in os.walk(directory_path):
+        for filename in filenames:
+            filepath = Path(dirpath) / filename
+            
+            try:
+                # Compute hash using hashlib (node_001) with chunked reading (node_004)
+                file_hash = _compute_file_hash(filepath)
+                hash_to_files[file_hash].append(str(filepath))
+                
+            except (OSError, IOError) as e:
+                # Log unreadable files but continue processing others
+                print(f"Warning: Could not read {filepath}: {e}")
+                continue
+    
+    # Filter to only return duplicates (2+ files per hash)
+    duplicates = {
+        hash_value: files 
+        for hash_value, files in hash_to_files.items() 
+        if len(files) > 1
+    }
+    
+    return duplicates
+
+
+def _compute_file_hash(filepath, chunk_size=8192):
+    """
+    Compute SHA256 hash of file contents using chunked reading.
+    
+    Args:
+        filepath (Path or str): Path to file
+        chunk_size (int): Size of chunks to read (default 8KB per node_004)
+        
+    Returns:
+        str: Hexadecimal hash string
+    """
+    sha256_hash = hashlib.sha256()
+    
+    # Chunked file reading (node_004: 8KB chunks for memory efficiency)
+    with open(filepath, 'rb') as f:
+        while True:
+            chunk = f.read(chunk_size)
+            if not chunk:
+                break
+            sha256_hash.update(chunk)
+    
+    return sha256_hash.hexdigest()
+
+
+# Example usage
+if __name__ == "__main__":
+    import json
+    
+    # Test with current directory
+    duplicates = find_duplicate_files(".")
+    
+    if duplicates:
+        print("Duplicate files found:")
+        for hash_val, files in duplicates.items():
+            print(f"\nHash: {hash_val[:16]}...")
+            for filepath in files:
+                print(f"  - {filepath}")
+    else:
+        print("No duplicate files found.")
+```
+
+---
+
+# Implementation Notes
+
+**Decision Traceability:**
+1. **node_001** (hashlib): `hashlib.sha256()` in `_compute_file_hash()` — standard library, secure, collision-resistant
+2. **node_002** (os.walk()): Direct use in main loop for recursive directory traversal — no external dependencies
+3. **node_004** (8KB chunks): `chunk_size=8192` in file reading loop — preserves memory efficiency constraint from edge_002
+
+**Key Features:**
+- Returns only true duplicates (2+ files per hash)
+- Gracefully handles unreadable files with warnings
+- Memory-efficient for arbitrarily large files via chunked reading
+- Uses Path for cross-platform compatibility
+- Clear separation between hash computation and file discovery logic
+
+The function is ready for testing and use.

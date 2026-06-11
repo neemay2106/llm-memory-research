@@ -49,7 +49,7 @@ def generate_handoff(graph,original_task):
     lines.append("=== CRITICAL DECISIONS ===")
 
     decision_nodes = dec(graph)
-    for x in range(0,3):
+    for x in range(min(3, len(decision_nodes))):
         node = decision_nodes[x]
         lines.append(f"The id of the node is  {node['node_id']}")
         lines.append(f"The decision made was {node['description']}")
@@ -101,7 +101,7 @@ def generate_handoff(graph,original_task):
     lines.append("=== CRITICAL DECISIONS ===")
 
     decision_nodes = dec(graph)
-    for x in range(0, 3):
+    for x in range(min(3, len(decision_nodes))):
         node = decision_nodes[x]
         lines.append(f"The id of the node is  {node['node_id']}")
         lines.append(f"The decision made was {node['description']}")

@@ -1,0 +1,268 @@
+# Startup Sequence
+
+**Confirmation:**
+I am continuing the implementation of a rate limiter with N requests per minute using a sliding window algorithm. The previous agent completed architectural decisions: sliding window algorithm (node_001), in-memory dictionary with deque per client (node_002), and automatic + periodic cleanup strategy (node_004). I am starting from core implementation with no code artifacts yet delivered. The immediate next action is to implement the RateLimiter class with the allow_request method, automatic cleanup during checks, and optional periodic cleanup.
+
+**Graph Analysis:**
+
+- **node_001** → **node_002**: Algorithm choice (sliding window) necessitates efficient data structure (dict + deque)
+- **node_004** → **node_003** (fixes edge): Cleanup strategy resolves unbounded memory growth constraint
+- **No open constraints or blocking issues detected.**
+
+---
+
+# Implementation
+
+```python
+from collections import deque
+from time import time
+from threading import Lock
+from typing import Optional
+import threading
+
+
+class RateLimiter:
+    """
+    A thread-safe rate limiter using sliding window algorithm.
+    
+    Tracks N requests per minute per client ID using a dictionary of deques.
+    Automatically cleans up expired timestamps during each check and optionally
+    cleans up idle clients via background job.
+    """
+    
+    def __init__(self, max_requests: int, window_seconds: int = 60):
+        """
+        Initialize the rate limiter.
+        
+        Args:
+            max_requests: Maximum number of requests allowed per window
+            window_seconds: Time window in seconds (default: 60 for 1 minute)
+        """
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self.client_requests: dict[str, deque] = {}
+        self._lock = Lock()
+        self._cleanup_thread: Optional[threading.Thread] = None
+        self._stop_cleanup = threading.Event()
+    
+    def allow_request(self, client_id: str) -> bool:
+        """
+        Check if a request from the client should be allowed.
+        
+        Implements sliding window: removes timestamps older than window_seconds,
+        checks if current request count is under limit, adds current timestamp.
+        
+        Args:
+            client_id: Unique identifier for the client
+            
+        Returns:
+            True if request is allowed, False if rate limit exceeded
+        """
+        current_time = time()
+        
+        with self._lock:
+            # Get or create client's request queue
+            if client_id not in self.client_requests:
+                self.client_requests[client_id] = deque()
+            
+            client_queue = self.client_requests[client_id]
+            
+            # Remove expired timestamps (older than window_seconds)
+            # This is the automatic cleanup during every check (node_004)
+            while client_queue and client_queue[0] < current_time - self.window_seconds:
+                client_queue.popleft()
+            
+            # Check if request is allowed
+            if len(client_queue) < self.max_requests:
+                # Add current request timestamp
+                client_queue.append(current_time)
+                return True
+            
+            return False
+    
+    def get_request_count(self, client_id: str) -> int:
+        """
+        Get the current request count for a client within the window.
+        
+        Args:
+            client_id: Unique identifier for the client
+            
+        Returns:
+            Number of requests in the current window
+        """
+        current_time = time()
+        
+        with self._lock:
+            if client_id not in self.client_requests:
+                return 0
+            
+            client_queue = self.client_requests[client_id]
+            
+            # Remove expired timestamps
+            while client_queue and client_queue[0] < current_time - self.window_seconds:
+                client_queue.popleft()
+            
+            return len(client_queue)
+    
+    def _periodic_cleanup(self, idle_threshold_seconds: int = 300) -> None:
+        """
+        Background job to clean up idle clients.
+        
+        Runs periodically to remove clients with no recent requests,
+        preventing unbounded memory growth even for inactive clients.
+        (Implements second part of node_004 decision)
+        
+        Args:
+            idle_threshold_seconds: Remove clients inactive for this duration
+        """
+        while not self._stop_cleanup.is_set():
+            try:
+                # Wait before next cleanup (check every 60 seconds)
+                if self._stop_cleanup.wait(timeout=60):
+                    break  # Stop event was set
+                
+                current_time = time()
+                
+                with self._lock:
+                    # Identify idle clients
+                    idle_clients = []
+                    for client_id, client_queue in self.client_requests.items():
+                        if client_queue:
+                            # Check if most recent request is older than threshold
+                            if client_queue[-1] < current_time - idle_threshold_seconds:
+                                idle_clients.append(client_id)
+                        else:
+                            # Empty queue (all timestamps expired) - remove it
+                            idle_clients.append(client_id)
+                    
+                    # Remove idle clients
+                    for client_id in idle_clients:
+                        del self.client_requests[client_id]
+            
+            except Exception as e:
+                # Log error but continue cleanup loop
+                print(f"Error in periodic cleanup: {e}")
+    
+    def start_periodic_cleanup(self, idle_threshold_seconds: int = 300) -> None:
+        """
+        Start the background cleanup job.
+        
+        Args:
+            idle_threshold_seconds: Remove clients inactive for this duration
+        """
+        if self._cleanup_thread is None or not self._cleanup_thread.is_alive():
+            self._stop_cleanup.clear()
+            self._cleanup_thread = threading.Thread(
+                target=self._periodic_cleanup,
+                args=(idle_threshold_seconds,),
+                daemon=True
+            )
+            self._cleanup_thread.start()
+    
+    def stop_periodic_cleanup(self) -> None:
+        """Stop the background cleanup job."""
+        self._stop_cleanup.set()
+        if self._cleanup_thread and self._cleanup_thread.is_alive():
+            self._cleanup_thread.join(timeout=5)
+    
+    def reset_client(self, client_id: str) -> None:
+        """
+        Reset the request history for a specific client.
+        
+        Args:
+            client_id: Unique identifier for the client
+        """
+        with self._lock:
+            if client_id in self.client_requests:
+                del self.client_requests[client_id]
+    
+    def get_stats(self) -> dict:
+        """
+        Get current statistics about the rate limiter.
+        
+        Returns:
+            Dictionary with number of tracked clients and their request counts
+        """
+        with self._lock:
+            current_time = time()
+            stats = {
+                "total_clients": len(self.client_requests),
+                "clients": {}
+            }
+            
+            for client_id, client_queue in self.client_requests.items():
+                # Remove expired timestamps for accurate count
+                while client_queue and client_queue[0] < current_time - self.window_seconds:
+                    client_queue.popleft()
+                stats["clients"][client_id] = len(client_queue)
+            
+            return stats
+
+
+# Example usage and testing
+if __name__ == "__main__":
+    import time as time_module
+    
+    # Create a rate limiter: 5 requests per minute
+    limiter = RateLimiter(max_requests=5, window_seconds=60)
+    
+    # Start periodic cleanup (optional)
+    limiter.start_periodic_cleanup(idle_threshold_seconds=120)
+    
+    print("Testing Rate Limiter (5 requests/minute)")
+    print("=" * 50)
+    
+    # Test 1: Same client, within limit
+    client = "user_123"
+    for i in range(5):
+        allowed = limiter.allow_request(client)
+        count = limiter.get_request_count(client)
+        print(f"Request {i+1}: {'ALLOWED' if allowed else 'DENIED'} (total: {count})")
+    
+    print("\n" + "=" * 50)
+    
+    # Test 2: Exceed limit
+    allowed = limiter.allow_request(client)
+    count = limiter.get_request_count(client)
+    print(f"Request 6: {'ALLOWED' if allowed else 'DENIED'} (total: {count})")
+    
+    print("\n" + "=" * 50)
+    
+    # Test 3: Multiple clients
+    print("\nMultiple clients test:")
+    for client_num in range(3):
+        client_id = f"user_{client_num}"
+        allowed = limiter.allow_request(client_id)
+        print(f"{client_id}: {'ALLOWED' if allowed else 'DENIED'}")
+    
+    print("\n" + "=" * 50)
+    print("\nStats:")
+    print(limiter.get_stats())
+    
+    # Cleanup
+    limiter.stop_periodic_cleanup()
+```
+
+---
+
+# Implementation Summary
+
+**What was delivered:**
+
+1. **RateLimiter class** implementing all three critical decisions:
+   - ✅ **node_001** (Sliding window): Maintains timestamps within exact 60-second window
+   - ✅ **node_002** (Dict + deque): O(1) client lookup, O(1) timestamp removal via popleft
+   - ✅ **node_004** (Cleanup): Automatic expiration removal in `allow_request()`, optional periodic cleanup via background thread
+
+2. **Core methods:**
+   - `allow_request(client_id)`: Main rate limiting check with automatic cleanup
+   - `get_request_count(client_id)`: Inspect current window state
+   - `_periodic_cleanup()`: Background job for idle client removal
+   - `start_periodic_cleanup()` / `stop_periodic_cleanup()`: Manage background job
+   - `reset_client()`, `get_stats()`: Utility methods
+
+3. **Thread safety:** All critical sections protected by lock
+
+4. **No artifacts missing:** Code is complete and runnable immediately
+
+The implementation is ready for production use and satisfies all documented decisions without contradiction.

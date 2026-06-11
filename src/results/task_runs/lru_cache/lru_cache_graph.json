@@ -1,0 +1,56 @@
+{
+  "task_metadata": {
+    "current_task": "Implement put(key, value) with eviction logic - evict LRU item when at capacity",
+    "completion_pct": 0.0,
+    "status": "Designing individual operations - put method with eviction"
+  },
+  "nodes": [
+    {
+      "type": "decision",
+      "node_id": "node_001",
+      "description": "Choose data structure for LRU cache implementation - use HashMap + Doubly Linked List",
+      "rationale": "HashMap provides O(1) get operations, while Doubly Linked List maintains insertion/access order for O(1) eviction. This combination achieves optimal time complexity for both get and put operations",
+      "task_state": "Starting LRU cache implementation - defining core architecture"
+    },
+    {
+      "type": "constraint",
+      "node_id": "node_002",
+      "constraint_type": "architectural",
+      "severity": "blocking",
+      "status": "open",
+      "description": "LRU cache must respect a fixed capacity limit",
+      "rationale": "LRU (Least Recently Used) eviction is only meaningful with a capacity constraint. When cache is full, the least recently used item must be evicted before inserting new items",
+      "source": "user_prompt"
+    },
+    {
+      "type": "decision",
+      "node_id": "node_003",
+      "description": "Implement get(key) to return value and move accessed node to front of linked list",
+      "rationale": "Get operation must mark the accessed item as most recently used by moving it to the front of the linked list. This ensures that least recently used items remain at the back for eviction",
+      "task_state": "Designing individual operations - get method"
+    },
+    {
+      "type": "decision",
+      "node_id": "node_004",
+      "description": "Implement put(key, value) with eviction logic - evict LRU item when at capacity",
+      "rationale": "Put operation must handle three cases: (1) key exists - update value and move to front, (2) key doesn't exist and under capacity - add to front, (3) key doesn't exist and at capacity - evict from back, then add to front",
+      "task_state": "Designing individual operations - put method with eviction"
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "edge_001",
+      "source_node_id": "node_001",
+      "target_node_id": "node_002",
+      "relationship_type": "was_constrained_by",
+      "rationale": "The HashMap + Doubly Linked List architecture design must account for the capacity constraint which drives the eviction logic"
+    },
+    {
+      "edge_id": "edge_002",
+      "source_node_id": "node_003",
+      "target_node_id": "node_004",
+      "relationship_type": "follows",
+      "rationale": "Get and put methods are logically sequenced - get establishes how items are marked as recently used, which put then leverages for eviction decisions"
+    }
+  ]
+}

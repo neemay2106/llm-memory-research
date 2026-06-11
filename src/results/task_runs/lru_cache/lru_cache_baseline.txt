@@ -1,0 +1,6 @@
+the implmentation is 0.0 done.The status of the task is Designing individual operations - put method with eviction,the task is left at Implement put(key, value) with eviction logic - evict LRU item when at capacity
+CONSTRAINTS: the constraint is LRU cache must respect a fixed capacity limit and the type of the constraint is architectural
+DECISION: Choose data structure for LRU cache implementation - use HashMap + Doubly Linked List — Reason: HashMap provides O(1) get operations, while Doubly Linked List maintains insertion/access order for O(1) eviction. This combination achieves optimal time complexity for both get and put operations
+DECISION: Implement get(key) to return value and move accessed node to front of linked list — Reason: Get operation must mark the accessed item as most recently used by moving it to the front of the linked list. This ensures that least recently used items remain at the back for eviction
+DECISION: Implement put(key, value) with eviction logic - evict LRU item when at capacity — Reason: Put operation must handle three cases: (1) key exists - update value and move to front, (2) key doesn't exist and under capacity - add to front, (3) key doesn't exist and at capacity - evict from back, then add to front
+The task is LRU cache with get and put

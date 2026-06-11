@@ -1,0 +1,6 @@
+the implmentation is 0.0 done.The status of the task is Algorithm design phase - deciding key format,the task is left at Use dot notation (.) as the key separator for nested levels
+CONSTRAINTS: the constraint is Deeply nested JSON structures may exceed Python's default recursion limit (typically 1000) and the type of the constraint is performance
+CONSTRAINTS: the constraint is If original keys contain dots, flattened keys become ambiguous (cannot distinguish nesting levels from literal dots in key names) and the type of the constraint is architectural
+DECISION: Choose recursion as the core algorithm for flattening nested JSON structures — Reason: Recursion naturally handles arbitrary nesting depth without modification. It simplifies the logic: process each value, and if it's a dict, recurse into it. This is more maintainable than iterative approaches with explicit stack management.
+DECISION: Use dot notation (.) as the key separator for nested levels — Reason: Dot notation is the most common convention in JSON flattening libraries (pandas, jsonflattener). It's readable and unambiguous. Example: {'a': {'b': 1}} becomes {'a.b': 1}
+The task is Flatten nested JSON keys into single-level dictionary

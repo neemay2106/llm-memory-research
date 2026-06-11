@@ -1,0 +1,176 @@
+# Startup Sequence
+
+## 1. Handoff Document Review
+I have read the handoff document. It establishes:
+- **Current Status**: 0.0% complete; memory-efficient hashing strategy established
+- **Stopping Point**: Implement chunked file reading for hash computation (8KB chunks)
+- **Three Key Decisions**: hashlib (SHA256), os.walk() for traversal, chunked reading (8KB)
+- **Task**: Walk directory and return duplicate files by content hash
+
+## 2. Confirmation Statement
+I am continuing the implementation of a duplicate file finder function that uses SHA256 hashing with chunked file reading. I am starting from the code implementation phase, building the core hash computation function with 8KB chunks. The immediate next action is to implement the complete solution: file hashing function, directory walking, duplicate detection, and return format.
+
+## 3. Risk Assessment
+No risks detected. All three decisions are sound and complementary:
+- hashlib + SHA256: industry standard, collision-resistant
+- os.walk(): standard library, efficient, reliable
+- 8KB chunks: optimal balance between memory usage and I/O performance for most file systems
+
+## 4. Ambiguity Resolution
+**Assumption**: The function should return a dictionary mapping hash values to lists of file paths where duplicates exist (only files with 2+ occurrences are included in results). This is the most practical output format for identifying duplicates.
+**Reason**: The task requires "return[ing] duplicate files" — this suggests showing which files are identical. A hash-to-paths mapping clearly shows all files with identical content.
+
+---
+
+# Implementation
+
+```python
+import os
+import hashlib
+from typing import Dict, List
+from pathlib import Path
+
+
+def find_duplicate_files(directory: str) -> Dict[str, List[str]]:
+    """
+    Find all duplicate files in a directory tree based on content hash.
+    
+    Args:
+        directory: Path to the directory to scan for duplicates
+        
+    Returns:
+        Dictionary mapping content hash (SHA256) to list of file paths
+        where that hash has 2 or more occurrences (i.e., duplicates).
+        Returns only files with duplicates; unique files are excluded.
+        
+    Raises:
+        ValueError: If directory does not exist or is not a directory
+        OSError: If directory cannot be read due to permissions
+    """
+    # Validate input
+    dir_path = Path(directory)
+    if not dir_path.exists():
+        raise ValueError(f"Directory does not exist: {directory}")
+    if not dir_path.is_dir():
+        raise ValueError(f"Path is not a directory: {directory}")
+    
+    # Dictionary to store: hash -> list of file paths
+    hash_to_files: Dict[str, List[str]] = {}
+    
+    # Walk directory tree
+    for dirpath, dirnames, filenames in os.walk(directory):
+        for filename in filenames:
+            filepath = os.path.join(dirpath, filename)
+            
+            try:
+                # Compute SHA256 hash of file content using chunked reading
+                file_hash = _compute_file_hash(filepath)
+                
+                # Track this file under its hash
+                if file_hash not in hash_to_files:
+                    hash_to_files[file_hash] = []
+                hash_to_files[file_hash].append(filepath)
+                
+            except (OSError, IOError) as e:
+                # Log and skip files that cannot be read
+                print(f"Warning: Could not read file {filepath}: {e}")
+                continue
+    
+    # Filter to return only duplicates (hashes with 2+ files)
+    duplicates = {
+        file_hash: filepaths
+        for file_hash, filepaths in hash_to_files.items()
+        if len(filepaths) >= 2
+    }
+    
+    return duplicates
+
+
+def _compute_file_hash(filepath: str, chunk_size: int = 8192) -> str:
+    """
+    Compute SHA256 hash of a file's content using chunked reading.
+    
+    Args:
+        filepath: Path to the file to hash
+        chunk_size: Size of chunks to read at a time (default 8KB)
+        
+    Returns:
+        Hexadecimal SHA256 hash string
+        
+    Raises:
+        OSError: If file cannot be opened or read
+    """
+    sha256_hash = hashlib.sha256()
+    
+    with open(filepath, 'rb') as f:
+        while True:
+            chunk = f.read(chunk_size)
+            if not chunk:
+                break
+            sha256_hash.update(chunk)
+    
+    return sha256_hash.hexdigest()
+
+
+# Example usage
+if __name__ == "__main__":
+    # Test the function
+    test_directory = "."  # Current directory
+    
+    duplicates = find_duplicate_files(test_directory)
+    
+    if duplicates:
+        print("Duplicate files found:\n")
+        for file_hash, filepaths in duplicates.items():
+            print(f"Hash: {file_hash}")
+            for filepath in filepaths:
+                print(f"  - {filepath}")
+            print()
+    else:
+        print("No duplicate files found.")
+```
+
+---
+
+# Implementation Details
+
+## Core Components
+
+1. **`find_duplicate_files(directory: str)`** — Main entry point
+   - Validates directory exists and is readable
+   - Uses `os.walk()` to traverse directory tree recursively
+   - Calls `_compute_file_hash()` for each file
+   - Builds hash-to-files mapping
+   - Returns only duplicates (hash → 2+ file paths)
+
+2. **`_compute_file_hash(filepath: str, chunk_size: int = 8192)`** — Hash computation
+   - Implements chunked file reading (8KB default, 8192 bytes)
+   - Uses SHA256 via hashlib (per decision)
+   - Returns hexadecimal hash string
+   - Never loads entire file into memory
+
+## Design Decisions Applied
+
+| Decision | How Implemented |
+|----------|-----------------|
+| **hashlib** | `hashlib.sha256()` in `_compute_file_hash()` |
+| **os.walk()** | Direct use in main loop: `for dirpath, dirnames, filenames in os.walk(directory)` |
+| **8KB chunks** | `chunk_size=8192` parameter; `while True: chunk = f.read(chunk_size)` loop |
+
+## Return Format
+```python
+{
+    "abc123...hash1": ["/path/to/file1", "/path/to/file2"],
+    "def456...hash2": ["/path/to/file3", "/path/to/file4", "/path/to/file5"]
+}
+```
+Only hashes with 2+ files are included.
+
+---
+
+# Next Steps for Future Continuation
+
+1. **Testing**: Create test files with known identical content; verify hash computation
+2. **Performance optimization**: Consider early hash termination (partial hash) for large files if needed
+3. **Output formatting**: Add optional CLI display or export to JSON/CSV
+4. **Error handling enhancement**: Detailed logging of inaccessible files and symlink handling

@@ -1,0 +1,225 @@
+# Startup Sequence
+
+## 1. Handoff Document Read ✓
+
+I have reviewed the handoff document in full. Here is what I understand:
+
+**What I am continuing:** Implementation of an LRU (Least Recently Used) cache with `get` and `put` operations using a HashMap + Doubly Linked List data structure.
+
+**Where I am starting from:** The `get(key)` method has been designed but implementation is at 0% completion. The immediate task is to implement the `put(key, value)` method with eviction logic for three cases: key exists (update + move to front), key doesn't exist + under capacity (add to front), key doesn't exist + at capacity (evict from back, add to front).
+
+**Immediate next action:** Implement the complete LRU cache class with both `get` and `put` methods, including the doubly linked list node structure and HashMap integration.
+
+---
+
+## 2. Risk and Ambiguity Check
+
+**No risks detected.** The architectural decisions are sound: HashMap + Doubly Linked List is the standard optimal approach for LRU cache (O(1) for all operations).
+
+**Ambiguity identified and resolved:**
+
+**Assumption:** The handoff does not specify a programming language. I will implement in **Python**, as it is language-agnostic and widely understood. If a different language is required, the logic translates directly.
+
+**Assumption:** No explicit capacity value is provided. I will design the cache to accept capacity as a constructor parameter.
+
+**Assumption:** The `get` method should return the value if found, or -1 (or None) if not found (standard LeetCode convention).
+
+---
+
+# Implementation
+
+```python
+class Node:
+    """Doubly Linked List Node for LRU Cache"""
+    def __init__(self, key=0, value=0):
+        self.key = key
+        self.value = value
+        self.prev = None
+        self.next = None
+
+
+class LRUCache:
+    """
+    LRU Cache implementation using HashMap + Doubly Linked List.
+    
+    - HashMap: O(1) lookups by key
+    - Doubly Linked List: maintains access order, O(1) eviction from back
+    
+    Invariants:
+    - Most recently used item is at the front (after head)
+    - Least recently used item is at the back (before tail)
+    - Size never exceeds capacity
+    """
+    
+    def __init__(self, capacity: int):
+        """
+        Initialize LRU Cache with fixed capacity.
+        
+        Args:
+            capacity: Maximum number of items the cache can hold
+        """
+        if capacity <= 0:
+            raise ValueError("Capacity must be positive")
+        
+        self.capacity = capacity
+        self.cache = {}  # Maps key -> Node
+        
+        # Dummy head and tail nodes to simplify edge cases
+        self.head = Node()  # Most recently used side
+        self.tail = Node()  # Least recently used side
+        
+        # Link dummy nodes
+        self.head.next = self.tail
+        self.tail.prev = self.head
+    
+    def _add_to_front(self, node: Node) -> None:
+        """Add node right after head (most recently used position)"""
+        node.prev = self.head
+        node.next = self.head.next
+        self.head.next.prev = node
+        self.head.next = node
+    
+    def _remove_node(self, node: Node) -> None:
+        """Remove node from doubly linked list"""
+        prev_node = node.prev
+        next_node = node.next
+        prev_node.next = next_node
+        next_node.prev = prev_node
+    
+    def _move_to_front(self, node: Node) -> None:
+        """Move existing node to front (most recently used)"""
+        self._remove_node(node)
+        self._add_to_front(node)
+    
+    def _evict_lru(self) -> None:
+        """Remove least recently used item (from back, before tail)"""
+        lru_node = self.tail.prev
+        self._remove_node(lru_node)
+        del self.cache[lru_node.key]
+    
+    def get(self, key: int) -> int:
+        """
+        Get the value of a key if it exists in cache, otherwise return -1.
+        
+        Operations:
+        1. Check if key exists in HashMap
+        2. If found: move node to front (mark as most recently used)
+        3. Return value or -1
+        
+        Time Complexity: O(1)
+        
+        Args:
+            key: The key to retrieve
+            
+        Returns:
+            The value associated with key, or -1 if not found
+        """
+        if key not in self.cache:
+            return -1
+        
+        node = self.cache[key]
+        self._move_to_front(node)
+        return node.value
+    
+    def put(self, key: int, value: int) -> None:
+        """
+        Put key-value pair into cache, handling three cases:
+        
+        Case 1: Key exists → update value and move to front
+        Case 2: Key doesn't exist, under capacity → create node, add to front
+        Case 3: Key doesn't exist, at capacity → evict LRU, create node, add to front
+        
+        Time Complexity: O(1)
+        
+        Args:
+            key: The key to insert/update
+            value: The value to associate with the key
+        """
+        # Case 1: Key already exists - update and move to front
+        if key in self.cache:
+            node = self.cache[key]
+            node.value = value
+            self._move_to_front(node)
+            return
+        
+        # Case 2 & 3: Key doesn't exist
+        # If at capacity, evict LRU item first (Case 3)
+        if len(self.cache) >= self.capacity:
+            self._evict_lru()
+        
+        # Create new node and add to front (most recently used position)
+        new_node = Node(key, value)
+        self.cache[key] = new_node
+        self._add_to_front(new_node)
+
+
+# ============================================================================
+# Example Usage and Test Cases
+# ============================================================================
+
+if __name__ == "__main__":
+    # Test Case 1: Basic operations
+    print("Test Case 1: Basic get/put")
+    cache = LRUCache(2)
+    cache.put(1, 1)
+    cache.put(2, 2)
+    print(f"get(1) = {cache.get(1)}")  # Expected: 1
+    cache.put(3, 3)  # Evicts key 2 (LRU)
+    print(f"get(2) = {cache.get(2)}")  # Expected: -1 (evicted)
+    print()
+    
+    # Test Case 2: Update existing key
+    print("Test Case 2: Update existing key")
+    cache = LRUCache(2)
+    cache.put(1, 1)
+    cache.put(2, 2)
+    cache.put(1, 10)  # Update key 1, moves to front
+    print(f"get(1) = {cache.get(1)}")  # Expected: 10
+    cache.put(3, 3)  # Evicts key 2 (LRU)
+    print(f"get(2) = {cache.get(2)}")  # Expected: -1
+    print()
+    
+    # Test Case 3: Access order matters
+    print("Test Case 3: Access order with get()")
+    cache = LRUCache(2)
+    cache.put(1, 1)
+    cache.put(2, 2)
+    _ = cache.get(1)  # Access key 1, marks as recently used
+    cache.put(3, 3)  # Should evict key 2 (LRU), not key 1
+    print(f"get(1) = {cache.get(1)}")  # Expected: 1
+    print(f"get(2) = {cache.get(2)}")  # Expected: -1 (evicted)
+    print()
+    
+    # Test Case 4: Single capacity
+    print("Test Case 4: Capacity of 1")
+    cache = LRUCache(1)
+    cache.put(1, 1)
+    print(f"get(1) = {cache.get(1)}")  # Expected: 1
+    cache.put(2, 2)  # Evicts key 1
+    print(f"get(1) = {cache.get(1)}")  # Expected: -1
+    print(f"get(2) = {cache.get(2)}")  # Expected: 2
+```
+
+---
+
+# Implementation Details Mapped to Decisions
+
+| Decision | Implementation |
+|----------|-----------------|
+| **Data structure: HashMap + Doubly Linked List** | `self.cache` dict + `Node` class with `prev`/`next` pointers |
+| **get() returns value and moves to front** | `get()` calls `_move_to_front()` to mark as most recently used |
+| **put() with 3-case eviction logic** | `put()` handles: (1) key exists → update + move to front, (2) under capacity → add to front, (3) at capacity → evict + add to front |
+| **Architectural constraint: fixed capacity** | `self.capacity` enforced; `_evict_lru()` maintains limit |
+
+---
+
+# Verification Checklist
+
+✓ All operations (get, put, eviction) are **O(1)**  
+✓ **Doubly linked list** correctly maintains insertion/access order  
+✓ **HashMap** provides O(1) lookups  
+✓ **Dummy head/tail nodes** eliminate edge case handling  
+✓ **Capacity constraint** is enforced through eviction  
+✓ **Three put() cases** explicitly handled  
+
+**Implementation complete and ready for use.**

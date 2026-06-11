@@ -1,0 +1,56 @@
+The given task by the user was left at this: Implement put(key, value) with eviction logic - evict LRU item when at capacity
+The status of the given task is: Designing individual operations - put method with eviction
+The completion percentage of the given task is: 0.0
+=== CRITICAL DECISIONS ===
+The id of the node is  node_001
+The decision made was Choose data structure for LRU cache implementation - use HashMap + Doubly Linked List
+the rationale behind was HashMap provides O(1) get operations, while Doubly Linked List maintains insertion/access order for O(1) eviction. This combination achieves optimal time complexity for both get and put operations
+the status of the task after decision was madeStarting LRU cache implementation - defining core architecture
+The id of the node is  node_003
+The decision made was Implement get(key) to return value and move accessed node to front of linked list
+the rationale behind was Get operation must mark the accessed item as most recently used by moving it to the front of the linked list. This ensures that least recently used items remain at the back for eviction
+the status of the task after decision was madeDesigning individual operations - get method
+The id of the node is  node_004
+The decision made was Implement put(key, value) with eviction logic - evict LRU item when at capacity
+the rationale behind was Put operation must handle three cases: (1) key exists - update value and move to front, (2) key doesn't exist and under capacity - add to front, (3) key doesn't exist and at capacity - evict from back, then add to front
+the status of the task after decision was madeDesigning individual operations - put method with eviction
+=== OPEN CONSTRAINTS ===
+The id of the node is  node_002
+Type of constraint was architectural
+Severity of the constraint is blocking
+The description of constraint was LRU cache must respect a fixed capacity limit
+The rationale of the constraint is LRU (Least Recently Used) eviction is only meaningful with a capacity constraint. When cache is full, the least recently used item must be evicted before inserting new items
+The source of constraint is user_prompt
+=== ALL DECISIONS ===
+The id of the node is  node_001
+The decision made was Choose data structure for LRU cache implementation - use HashMap + Doubly Linked List
+the rationale behind was HashMap provides O(1) get operations, while Doubly Linked List maintains insertion/access order for O(1) eviction. This combination achieves optimal time complexity for both get and put operations
+the status of the task after decision was madeStarting LRU cache implementation - defining core architecture
+The id of the node is  node_003
+The decision made was Implement get(key) to return value and move accessed node to front of linked list
+the rationale behind was Get operation must mark the accessed item as most recently used by moving it to the front of the linked list. This ensures that least recently used items remain at the back for eviction
+the status of the task after decision was madeDesigning individual operations - get method
+The id of the node is  node_004
+The decision made was Implement put(key, value) with eviction logic - evict LRU item when at capacity
+the rationale behind was Put operation must handle three cases: (1) key exists - update value and move to front, (2) key doesn't exist and under capacity - add to front, (3) key doesn't exist and at capacity - evict from back, then add to front
+the status of the task after decision was madeDesigning individual operations - put method with eviction
+=== ARTIFACTS ===
+=== KEY EDGES ===
+The id of the edge is  edge_001
+node_001 -----was_constrained_by------>node_002
+rationale of the edge is The HashMap + Doubly Linked List architecture design must account for the capacity constraint which drives the eviction logic
+=== CRITICAL DECISIONS ===
+The id of the node is  node_001
+The decision made was Choose data structure for LRU cache implementation - use HashMap + Doubly Linked List
+the rationale behind was HashMap provides O(1) get operations, while Doubly Linked List maintains insertion/access order for O(1) eviction. This combination achieves optimal time complexity for both get and put operations
+the status of the task after decision was madeStarting LRU cache implementation - defining core architecture
+The id of the node is  node_003
+The decision made was Implement get(key) to return value and move accessed node to front of linked list
+the rationale behind was Get operation must mark the accessed item as most recently used by moving it to the front of the linked list. This ensures that least recently used items remain at the back for eviction
+the status of the task after decision was madeDesigning individual operations - get method
+The id of the node is  node_004
+The decision made was Implement put(key, value) with eviction logic - evict LRU item when at capacity
+the rationale behind was Put operation must handle three cases: (1) key exists - update value and move to front, (2) key doesn't exist and under capacity - add to front, (3) key doesn't exist and at capacity - evict from back, then add to front
+the status of the task after decision was madeDesigning individual operations - put method with eviction
+=== ORIGINAL TASK===
+The task is LRU cache with get and put

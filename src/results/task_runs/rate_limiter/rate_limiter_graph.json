@@ -1,0 +1,56 @@
+{
+  "task_metadata": {
+    "current_task": "Implement automatic cleanup of expired timestamps during every allow_request check and periodic cleanup of idle clients",
+    "completion_pct": 0.0,
+    "status": "Memory management strategy defined, ready for core implementation"
+  },
+  "nodes": [
+    {
+      "type": "decision",
+      "node_id": "node_001",
+      "description": "Choose sliding window algorithm for rate limiting implementation to accurately track requests per minute",
+      "rationale": "Sliding window provides precise request tracking by maintaining a timestamp-based window of exactly one minute, ensuring accurate rate limiting that prevents request bunching at minute boundaries unlike fixed window approach",
+      "task_state": "Initializing rate limiter design, algorithm selection in progress"
+    },
+    {
+      "type": "decision",
+      "node_id": "node_002",
+      "description": "Use in-memory dictionary with queue per client to store request timestamps for sliding window calculation",
+      "rationale": "Dictionary keyed by client ID with deque for each client provides O(1) lookup and efficient timestamp insertion/removal. Deque supports O(1) popleft operations needed for removing expired timestamps from the window",
+      "task_state": "Data structure selection complete, ready for implementation"
+    },
+    {
+      "type": "constraint",
+      "node_id": "node_003",
+      "constraint_type": "memory",
+      "severity": "high",
+      "status": "mitigated",
+      "description": "In-memory storage for request timestamps will accumulate unbounded if stale client entries are not cleaned up, potentially causing memory exhaustion",
+      "rationale": "Without periodic cleanup of inactive clients or expired timestamps, the dictionary will grow indefinitely as new clients make requests. Each timestamp is stored until it exits the sliding window, requiring active garbage collection",
+      "source": "user_prompt"
+    },
+    {
+      "type": "decision",
+      "node_id": "node_004",
+      "description": "Implement automatic cleanup of expired timestamps during every allow_request check and periodic cleanup of idle clients",
+      "rationale": "Proactive removal of timestamps older than 60 seconds during each request check prevents unbounded growth. Adding optional periodic cleanup job ensures even idle clients eventually get cleared from the dictionary",
+      "task_state": "Memory management strategy defined, ready for core implementation"
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "edge_001",
+      "source_node_id": "node_002",
+      "target_node_id": "node_001",
+      "relationship_type": "implements",
+      "rationale": "The dictionary with deque data structure is the concrete implementation of the sliding window algorithm design decision"
+    },
+    {
+      "edge_id": "edge_002",
+      "source_node_id": "node_004",
+      "target_node_id": "node_003",
+      "relationship_type": "fixes",
+      "rationale": "The cleanup strategy directly resolves the unbounded memory growth constraint by ensuring expired timestamps and idle clients are regularly removed"
+    }
+  ]
+}
