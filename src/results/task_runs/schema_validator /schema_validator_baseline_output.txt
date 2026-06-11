@@ -1,0 +1,473 @@
+# Startup Sequence
+
+## 1. Handoff Document Review — Complete
+
+I have read the entire handoff document. Here is what I understand:
+
+**What I'm continuing:**
+A CSV schema validator that must support type coercion (converting string data to appropriate types) and error accumulation (collecting all validation errors rather than stopping at the first one).
+
+**Where I'm starting from:**
+The implementation is 0% complete. The design phase has identified the core architecture (schema definition + type coercion rules + error accumulation), but no code exists yet. The immediate task is to implement the type coercion handlers.
+
+**Immediate next action:**
+Implement type coercion handlers for the five core types (string, number, boolean, date) plus a mechanism for custom coercers, while ensuring the architecture supports full error accumulation and efficient batch processing.
+
+---
+
+## 2. Constraint & Decision Analysis
+
+### Key Constraints (Non-Negotiable)
+
+| Constraint | Type | Implication |
+|-----------|------|-------------|
+| Accumulate all validation errors rather than fail on first | **Architectural** | Validation must continue through entire row/file and collect all failures before returning results |
+| Type coercion must be efficient for large CSV files | **Performance** | Handlers must avoid regex, heavy parsing, or recursive calls; prioritize speed over elegance |
+
+### Key Decisions (Already Made — Do Not Revisit)
+
+1. **Core validator architecture**: Schema definition + type coercion rules + error accumulation mechanism
+   - *Decision binding*: Schema and validation are separate concerns
+   - *Your constraint*: Do not merge schema/validation logic
+   
+2. **Type coercion handlers for common types**: string, number, boolean, date + custom
+   - *Decision binding*: These five types are the minimum; custom extensions are allowed
+   - *Your constraint*: Implement all five; custom must be pluggable
+
+---
+
+## 3. Risk Assessment
+
+**No risks detected.** The architectural decisions are sound for a CSV validator. Error accumulation is appropriate. Efficiency is a valid concern but not architecturally risky if addressed during implementation.
+
+---
+
+## 4. Ambiguity Resolution
+
+**Assumption 1:** "Custom coercers" means a registration/plugin mechanism where users can define their own type handlers (e.g., custom date formats, domain-specific types).  
+**Reason:** The handoff mentions "optional custom coercers," implying extensibility at runtime or configuration time, not static inheritance.
+
+**Assumption 2:** Error accumulation applies at the row level, not the field level. A single row may have multiple field validation failures, and all must be collected.  
+**Reason:** "Comprehensive feedback" in the constraint suggests granular error reporting.
+
+**Assumption 3:** The validator is written in Python (most common for CSV work) unless specified otherwise. No language was stated, so Python is a reasonable default.  
+**Reason:** CSV validators are frequently built in Python; it's the most practical default in the absence of specification.
+
+---
+
+## 5. Proceeding with Implementation
+
+I will now implement the CSV schema validator starting from the type coercion handlers, building upward to the error accumulation layer and schema architecture.
+
+---
+
+# Implementation
+
+## Phase 1: Core Type Coercion Handlers
+
+```python
+"""
+csv_validator/coercers.py
+
+Type coercion handlers for CSV validation.
+Each handler converts a string value to the target type and returns
+(success: bool, value: any, error_message: str | None)
+"""
+
+from typing import Callable, Any, Optional, Tuple, Union
+from datetime import datetime
+import re
+
+
+# Type signature for a coercer function
+CoercerFunction = Callable[[str], Tuple[bool, Any, Optional[str]]]
+
+
+class CoercionError(ValueError):
+    """Raised when coercion fails with a recoverable error."""
+    pass
+
+
+class TypeCoercer:
+    """
+    Manages type coercion handlers for CSV fields.
+    Supports built-in types (string, number, boolean, date) and custom coercers.
+    """
+
+    def __init__(self):
+        self._coercers: dict[str, CoercerFunction] = {}
+        self._register_builtin_coercers()
+
+    def _register_builtin_coercers(self) -> None:
+        """Register all built-in type coercers."""
+        self.register("string", self._coerce_string)
+        self.register("number", self._coerce_number)
+        self.register("boolean", self._coerce_boolean)
+        self.register("date", self._coerce_date)
+
+    def register(self, type_name: str, coercer: CoercerFunction) -> None:
+        """
+        Register a custom type coercer.
+        
+        Args:
+            type_name: Name of the type (e.g., "email", "uuid")
+            coercer: Function(str) -> (bool, Any, Optional[str])
+                    Returns (success, value, error_message)
+        """
+        if not callable(coercer):
+            raise TypeError(f"Coercer must be callable, got {type(coercer)}")
+        self._coercers[type_name] = coercer
+
+    def coerce(self, value: str, type_name: str) -> Tuple[bool, Any, Optional[str]]:
+        """
+        Coerce a string value to the specified type.
+        
+        Args:
+            value: String value from CSV
+            type_name: Target type name
+            
+        Returns:
+            (success, coerced_value, error_message)
+            - success: True if coercion succeeded
+            - coerced_value: The coerced value, or original string if failed
+            - error_message: Human-readable error if failed, else None
+        """
+        if type_name not in self._coercers:
+            return False, value, f"Unknown type: {type_name}"
+        
+        try:
+            return self._coercers[type_name](value)
+        except Exception as e:
+            return False, value, f"Coercion error: {str(e)}"
+
+    # =========================================================================
+    # Built-in Coercers
+    # =========================================================================
+
+    @staticmethod
+    def _coerce_string(value: str) -> Tuple[bool, str, None]:
+        """
+        String coercion: strips whitespace, always succeeds.
+        """
+        return True, value.strip(), None
+
+    @staticmethod
+    def _coerce_number(value: str) -> Tuple[bool, Union[int, float], Optional[str]]:
+        """
+        Number coercion: converts to int or float.
+        Tries int first; falls back to float if decimal point present.
+        """
+        value = value.strip()
+        
+        # Empty string is invalid
+        if not value:
+            return False, None, "Empty value cannot be coerced to number"
+        
+        # Try int first (more efficient)
+        try:
+            return True, int(value), None
+        except ValueError:
+            pass
+        
+        # Try float
+        try:
+            return True, float(value), None
+        except ValueError:
+            return False, value, f"'{value}' is not a valid number"
+
+    @staticmethod
+    def _coerce_boolean(value: str) -> Tuple[bool, bool, Optional[str]]:
+        """
+        Boolean coercion: recognizes common true/false representations.
+        Case-insensitive.
+        """
+        value_lower = value.strip().lower()
+        
+        if value_lower in ("true", "yes", "1", "on"):
+            return True, True, None
+        elif value_lower in ("false", "no", "0", "off"):
+            return True, False, None
+        else:
+            return False, value, f"'{value}' is not a valid boolean"
+
+    @staticmethod
+    def _coerce_date(value: str) -> Tuple[bool, Optional[datetime], Optional[str]]:
+        """
+        Date coercion: attempts common ISO 8601 and US formats.
+        Returns datetime object (or date-only if no time component).
+        """
+        value = value.strip()
+        
+        # List of common date formats to try
+        # Ordered by likelihood (ISO 8601 first)
+        formats = [
+            "%Y-%m-%d",              # 2024-01-15
+            "%Y-%m-%d %H:%M:%S",     # 2024-01-15 14:30:45
+            "%Y-%m-%dT%H:%M:%S",     # 2024-01-15T14:30:45 (ISO 8601)
+            "%m/%d/%Y",              # 01/15/2024 (US)
+            "%m-%d-%Y",              # 01-15-2024
+            "%d/%m/%Y",              # 15/01/2024 (EU)
+            "%B %d, %Y",             # January 15, 2024
+            "%b %d, %Y",             # Jan 15, 2024
+        ]
+        
+        for fmt in formats:
+            try:
+                parsed = datetime.strptime(value, fmt)
+                return True, parsed, None
+            except ValueError:
+                continue
+        
+        return False, value, f"'{value}' does not match any recognized date format"
+
+
+# Singleton instance for global use
+_default_coercer = TypeCoercer()
+
+
+def get_default_coercer() -> TypeCoercer:
+    """Get the default global TypeCoercer instance."""
+    return _default_coercer
+```
+
+---
+
+## Phase 2: Schema Definition
+
+```python
+"""
+csv_validator/schema.py
+
+Schema definition for CSV validation.
+Defines columns, their types, constraints, and optional metadata.
+"""
+
+from typing import Optional, List, Dict, Any
+from dataclasses import dataclass, field
+
+
+@dataclass
+class ColumnSchema:
+    """
+    Defines validation rules for a single CSV column.
+    """
+    name: str
+    type_name: str
+    required: bool = True
+    default: Optional[Any] = None
+    description: Optional[str] = None
+    custom_metadata: Dict[str, Any] = field(default_factory=dict)
+    
+    def __post_init__(self):
+        if not self.name:
+            raise ValueError("Column name cannot be empty")
+        if not self.type_name:
+            raise ValueError("Type name cannot be empty")
+
+
+@dataclass
+class CSVSchema:
+    """
+    Complete schema for CSV validation.
+    Maps column names to their validation rules.
+    """
+    columns: List[ColumnSchema]
+    strict_mode: bool = False  # If True, reject unknown columns
+    
+    def __post_init__(self):
+        if not self.columns:
+            raise ValueError("Schema must contain at least one column")
+        
+        # Check for duplicate column names
+        names = [col.name for col in self.columns]
+        if len(names) != len(set(names)):
+            raise ValueError("Duplicate column names in schema")
+    
+    def get_column(self, name: str) -> Optional[ColumnSchema]:
+        """Get column schema by name."""
+        for col in self.columns:
+            if col.name == name:
+                return col
+        return None
+    
+    def column_names(self) -> List[str]:
+        """Return list of column names in schema."""
+        return [col.name for col in self.columns]
+```
+
+---
+
+## Phase 3: Error Accumulation & Validation Result
+
+```python
+"""
+csv_validator/errors.py
+
+Error accumulation and reporting for CSV validation.
+"""
+
+from typing import List, Dict, Any, Optional
+from dataclasses import dataclass, field
+from enum import Enum
+
+
+class ErrorSeverity(Enum):
+    """Severity level for validation errors."""
+    WARNING = "warning"
+    ERROR = "error"
+
+
+@dataclass
+class FieldError:
+    """
+    A single field-level validation error.
+    """
+    row_number: int
+    column_name: str
+    value: Any
+    error_message: str
+    severity: ErrorSeverity = ErrorSeverity.ERROR
+    
+    def __str__(self) -> str:
+        return (
+            f"Row {self.row_number}, Column '{self.column_name}': "
+            f"{self.error_message} (value: {repr(self.value)})"
+        )
+
+
+@dataclass
+class RowError:
+    """
+    All errors for a single row.
+    """
+    row_number: int
+    field_errors: List[FieldError] = field(default_factory=list)
+    
+    def add_error(self, field_error: FieldError) -> None:
+        """Add a field error to this row."""
+        self.field_errors.append(field_error)
+    
+    def has_errors(self) -> bool:
+        """Return True if this row has any errors."""
+        return len(self.field_errors) > 0
+    
+    def error_count(self) -> int:
+        """Return number of errors in this row."""
+        return len(self.field_errors)
+
+
+@dataclass
+class ValidationResult:
+    """
+    Complete validation result with accumulated errors.
+    """
+    valid: bool
+    row_errors: List[RowError] = field(default_factory=list)
+    coerced_rows: List[Dict[str, Any]] = field(default_factory=list)
+    
+    def add_row_error(self, row_error: RowError) -> None:
+        """Add a row error."""
+        self.row_errors.append(row_error)
+    
+    def add_coerced_row(self, row_data: Dict[str, Any]) -> None:
+        """Add a successfully coerced row."""
+        self.coerced_rows.append(row_data)
+    
+    def total_errors(self) -> int:
+        """Return total number of errors across all rows."""
+        return sum(row.error_count() for row in self.row_errors)
+    
+    def error_summary(self) -> str:
+        """Return human-readable summary of all errors."""
+        if not self.row_errors:
+            return "No errors"
+        
+        lines = [f"Validation failed with {self.total_errors()} error(s):"]
+        for row_error in self.row_errors:
+            for field_error in row_error.field_errors:
+                lines.append(f"  {str(field_error)}")
+        
+        return "\n".join(lines)
+    
+    def is_valid(self) -> bool:
+        """Return True if validation succeeded (no errors)."""
+        return not self.row_errors
+```
+
+---
+
+## Phase 4: Core Validator
+
+```python
+"""
+csv_validator/validator.py
+
+Main CSV schema validator with type coercion and error accumulation.
+"""
+
+from typing import List, Dict, Any, Optional, Iterator
+import csv
+from io import StringIO, IOBase
+
+from .schema import CSVSchema, ColumnSchema
+from .coercers import TypeCoercer, get_default_coercer
+from .errors import ValidationResult, RowError, FieldError, ErrorSeverity
+
+
+class CSVValidator:
+    """
+    Validates CSV data against a schema with type coercion and error accumulation.
+    
+    Processes all rows and accumulates errors rather than failing on first error.
+    Supports custom type coercers and optional field constraints.
+    """
+    
+    def __init__(
+        self,
+        schema: CSVSchema,
+        coercer: Optional[TypeCoercer] = None
+    ):
+        """
+        Initialize validator with a schema and optional custom coercer.
+        
+        Args:
+            schema: CSVSchema defining columns and their types
+            coercer: TypeCoercer instance (uses default if None)
+        """
+        self.schema = schema
+        self.coercer = coercer or get_default_coercer()
+    
+    def validate_file(self, filepath: str) -> ValidationResult:
+        """
+        Validate a CSV file.
+        
+        Args:
+            filepath: Path to CSV file
+            
+        Returns:
+            ValidationResult with all errors and successfully coerced rows
+        """
+        with open(filepath, 'r', newline='', encoding='utf-8') as f:
+            return self.validate_stream(f)
+    
+    def validate_stream(self, stream: IOBase) -> ValidationResult:
+        """
+        Validate CSV data from a file-like object or stream.
+        
+        Args:
+            stream: File object or StringIO
+            
+        Returns:
+            ValidationResult with all errors and successfully coerced rows
+        """
+        reader = csv.DictReader(stream)
+        
+        if not reader.fieldnames:
+            return ValidationResult(valid=False)
+        
+        return self._validate_rows(reader)
+    
+    def validate_string(self, csv_string: str) -> ValidationResult:
+        """
+        Validate CSV data from a string.
+        

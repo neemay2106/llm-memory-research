@@ -1,0 +1,63 @@
+{
+  "task_metadata": {
+    "current_task": "Implement exponential backoff formula as: delay = min(base_delay * (base ** attempt), max_delay)",
+    "completion_pct": 0.0,
+    "status": "Implementation phase - defining backoff calculation"
+  },
+  "nodes": [
+    {
+      "type": "decision",
+      "node_id": "node_001",
+      "description": "Choose Python as implementation language for retry decorator with exponential backoff",
+      "rationale": "Python's decorator pattern is well-suited for this task. The functools module provides utilities for decorator implementation, and Python's syntax naturally supports decorators with arguments",
+      "task_state": "Initial design phase - selecting language and approach"
+    },
+    {
+      "type": "decision",
+      "node_id": "node_002",
+      "description": "Design retry decorator to accept configuration parameters: max_retries, base_delay, max_delay, and exponential base",
+      "rationale": "These parameters provide flexibility to apply the decorator to different scenarios with varying retry strategies. Base delay sets initial wait, max_delay caps exponential growth, and base (default 2) controls exponential curve",
+      "task_state": "Design phase - defining decorator signature and parameters",
+      "dependencies": [
+        "functools.wraps - preserves function metadata",
+        "time.sleep - implements delays between retries"
+      ]
+    },
+    {
+      "type": "constraint",
+      "node_id": "node_003",
+      "constraint_type": "architectural",
+      "severity": "high",
+      "status": "open",
+      "description": "Decorator must handle exceptions appropriately - catch and retry on specific exception types, and re-raise after max retries exhausted",
+      "rationale": "Uncontrolled exception propagation could cause unexpected failures. Must distinguish between transient errors (worth retrying) and permanent failures (should fail fast)",
+      "source": "user_prompt"
+    },
+    {
+      "type": "decision",
+      "node_id": "node_004",
+      "description": "Implement exponential backoff formula as: delay = min(base_delay * (base ** attempt), max_delay)",
+      "rationale": "This formula prevents excessive delays at high retry counts while allowing configurable upper bounds. Using min() ensures max_delay acts as a ceiling",
+      "task_state": "Implementation phase - defining backoff calculation",
+      "dependencies": [
+        "math operations for exponential calculation"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "edge_001",
+      "source_node_id": "node_002",
+      "target_node_id": "node_001",
+      "relationship_type": "follows",
+      "rationale": "Decorator signature and parameters are defined after selecting Python as the implementation language"
+    },
+    {
+      "edge_id": "edge_002",
+      "source_node_id": "node_004",
+      "target_node_id": "node_003",
+      "relationship_type": "was_constrained_by",
+      "rationale": "The exponential backoff calculation must work within the exception handling constraint to determine appropriate wait times between retry attempts"
+    }
+  ]
+}

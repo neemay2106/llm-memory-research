@@ -1,0 +1,135 @@
+# Startup Sequence
+
+## Confirmation of Continuation
+
+I am continuing the implementation of a **context manager for timing code blocks** that accumulates timing data by label and produces summary reports. The previous agent completed the design and `__init__`/`__enter__` methods; I am starting from **node_004: implementing the `__exit__` method** to calculate elapsed time and accumulate it in the class-level timings dictionary. The immediate next action is to implement `__exit__` with timing calculation and accumulation logic, then add a summary report method.
+
+---
+
+## Risk & Constraint Analysis
+
+**Traced Dependencies (Key Edges):**
+- node_001 → node_002: Context manager design requires class-level storage of accumulated timings ✓
+- node_002 → node_003: Data structure (class-level dict + instance start_time) enables __init__ to capture label and start time ✓
+- node_003 → node_004: __enter__ captures start_time; __exit__ must calculate duration and add to class-level dict under label ✓
+
+**No blocking constraints identified.** All prior decisions are sound and internally consistent.
+
+---
+
+## Implementation
+
+I will now implement:
+1. The `__exit__` method to calculate elapsed time and accumulate in the class-level dictionary
+2. A `summary()` class method to produce the per-label report
+
+```python
+import time
+from typing import Optional
+
+class CodeBlockTimer:
+    """Context manager for timing code blocks with per-label accumulation."""
+    
+    # Class-level storage: {label: total_elapsed_seconds}
+    timings: dict[str, float] = {}
+    
+    def __init__(self, label: str) -> None:
+        """
+        Initialize the timer with a label.
+        
+        Args:
+            label: Identifier for the code block being timed
+        """
+        self.label = label
+        self.start_time: Optional[float] = None
+    
+    def __enter__(self):
+        """Record the start time when entering the context."""
+        self.start_time = time.perf_counter()
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        Calculate elapsed time and accumulate it in the class-level timings dictionary.
+        
+        Args:
+            exc_type: Exception type if one was raised, else None
+            exc_val: Exception value if one was raised, else None
+            exc_tb: Exception traceback if one was raised, else None
+        
+        Returns:
+            False (or None) to propagate any exception that occurred
+        """
+        elapsed = time.perf_counter() - self.start_time
+        
+        # Accumulate elapsed time under the label
+        if self.label in self.timings:
+            self.timings[self.label] += elapsed
+        else:
+            self.timings[self.label] = elapsed
+        
+        # Do not suppress exceptions
+        return False
+    
+    @classmethod
+    def summary(cls) -> str:
+        """
+        Generate a per-label summary report of accumulated timing data.
+        
+        Returns:
+            A formatted string report showing each label and total accumulated time
+        """
+        if not cls.timings:
+            return "No timing data recorded."
+        
+        # Sort labels alphabetically for consistent output
+        lines = ["Timing Summary:"]
+        for label in sorted(cls.timings.keys()):
+            total_time = cls.timings[label]
+            lines.append(f"  {label}: {total_time:.6f}s")
+        
+        return "\n".join(lines)
+    
+    @classmethod
+    def reset(cls) -> None:
+        """Clear all accumulated timing data."""
+        cls.timings.clear()
+
+
+# Example usage
+if __name__ == "__main__":
+    import time
+    
+    # Time multiple blocks
+    with CodeBlockTimer("task_a"):
+        time.sleep(0.1)
+    
+    with CodeBlockTimer("task_b"):
+        time.sleep(0.05)
+    
+    with CodeBlockTimer("task_a"):
+        time.sleep(0.1)
+    
+    # Print summary
+    print(CodeBlockTimer.summary())
+```
+
+---
+
+## Summary
+
+✅ **Implemented `__exit__` method** (node_004):
+- Calculates elapsed time using `time.perf_counter()` for accuracy
+- Accumulates in class-level `timings` dictionary under label (creates entry if new, adds to existing if label used multiple times)
+- Returns `False` to allow exceptions to propagate
+
+✅ **Added `summary()` class method**:
+- Produces formatted per-label report
+- Sorts labels alphabetically for consistent output
+- Shows total accumulated time for each label
+
+✅ **Added `reset()` class method** for testing convenience
+
+✅ **Complete working example** demonstrating multiple uses of the same label accumulating time correctly
+
+All decisions from node_001 through node_004 are now fully implemented and integrated.

@@ -1,0 +1,182 @@
+# Startup Sequence
+
+## Confirmation Statement
+I am continuing the implementation of an EventEmitter class with three core methods (on, emit, off). The previous agent completed the architectural decisions and began implementing the `on()` method for listener registration with method chaining. I am starting from the point where the `on()` method implementation needs to be completed, followed by implementing the `emit()` and `off()` methods.
+
+## Graph Reasoning: Key Edge Analysis
+
+**Edge `edge_001`: node_001 → node_002 (was_constrained_by)**
+- **Inference**: The EventEmitter class design (node_001) is directly constrained by the requirement for efficient listener storage and removal (node_002, high severity).
+- **Current status**: Decision node_003 (Map<string, Function[]>) satisfies this constraint by providing O(1) lookup and efficient array operations.
+- **No blocking issues**: The architectural constraint is already addressed by the chosen data structure.
+
+## No Risk Flags
+The prior decisions are sound:
+- Class-based approach is standard for event emitters ✓
+- Map + arrays provides the performance characteristics needed ✓
+- Method chaining via returning `this` is appropriate ✓
+
+## Continuation Point
+Previous work: Decisions made for all three methods; implementation of `on()` started
+**Next action**: Complete the `on()` method, then implement `emit()` and `off()` methods, then provide full working code.
+
+---
+
+# Implementation
+
+```javascript
+class EventEmitter {
+  constructor() {
+    // Map: eventName (string) -> array of listener functions
+    this.listeners = new Map();
+  }
+
+  /**
+   * Register an event listener
+   * @param {string} eventName - The name of the event
+   * @param {Function} listener - The callback function to execute when the event is emitted
+   * @returns {EventEmitter} - Returns this for method chaining
+   */
+  on(eventName, listener) {
+    // Validate inputs
+    if (typeof eventName !== 'string') {
+      throw new TypeError('Event name must be a string');
+    }
+    if (typeof listener !== 'function') {
+      throw new TypeError('Listener must be a function');
+    }
+
+    // Initialize listener array for this event if it doesn't exist
+    if (!this.listeners.has(eventName)) {
+      this.listeners.set(eventName, []);
+    }
+
+    // Add the listener to the array
+    this.listeners.get(eventName).push(listener);
+
+    // Return this for method chaining
+    return this;
+  }
+
+  /**
+   * Emit an event, calling all registered listeners with provided arguments
+   * @param {string} eventName - The name of the event to emit
+   * @param {...any} args - Arguments to pass to each listener
+   * @returns {boolean} - Returns true if the event had listeners, false otherwise
+   */
+  emit(eventName, ...args) {
+    // Validate input
+    if (typeof eventName !== 'string') {
+      throw new TypeError('Event name must be a string');
+    }
+
+    // Check if this event has any listeners
+    if (!this.listeners.has(eventName)) {
+      return false;
+    }
+
+    const eventListeners = this.listeners.get(eventName);
+
+    // Call each listener with the provided arguments
+    for (const listener of eventListeners) {
+      listener(...args);
+    }
+
+    // Return true if listeners were called
+    return eventListeners.length > 0;
+  }
+
+  /**
+   * Remove a specific listener from an event
+   * @param {string} eventName - The name of the event
+   * @param {Function} listener - The specific listener function to remove
+   * @returns {EventEmitter} - Returns this for method chaining
+   */
+  off(eventName, listener) {
+    // Validate inputs
+    if (typeof eventName !== 'string') {
+      throw new TypeError('Event name must be a string');
+    }
+    if (typeof listener !== 'function') {
+      throw new TypeError('Listener must be a function');
+    }
+
+    // If the event doesn't exist, return early
+    if (!this.listeners.has(eventName)) {
+      return this;
+    }
+
+    const eventListeners = this.listeners.get(eventName);
+
+    // Find and remove the listener (linear search O(n) as documented)
+    const index = eventListeners.indexOf(listener);
+    if (index !== -1) {
+      eventListeners.splice(index, 1);
+    }
+
+    // If no listeners remain, clean up the event entry
+    if (eventListeners.length === 0) {
+      this.listeners.delete(eventName);
+    }
+
+    // Return this for method chaining
+    return this;
+  }
+}
+
+// Export for use in modules
+module.exports = EventEmitter;
+```
+
+---
+
+# Usage Examples
+
+```javascript
+// Create an instance
+const emitter = new EventEmitter();
+
+// Register listeners with method chaining
+emitter
+  .on('user:login', (username) => {
+    console.log(`${username} logged in`);
+  })
+  .on('user:login', (username) => {
+    console.log(`Welcome back, ${username}!`);
+  })
+  .on('user:logout', (username) => {
+    console.log(`${username} logged out`);
+  });
+
+// Emit events
+emitter.emit('user:login', 'alice');
+// Output:
+// alice logged in
+// Welcome back, alice!
+
+emitter.emit('user:logout', 'alice');
+// Output:
+// alice logged out
+
+// Remove a listener
+const loginHandler = (username) => console.log(`${username} signed in`);
+emitter.on('user:login', loginHandler);
+emitter.off('user:login', loginHandler);
+
+// Check if event has listeners
+console.log(emitter.emit('user:login', 'bob')); // true (other handlers exist)
+console.log(emitter.emit('nonexistent:event')); // false (no listeners)
+```
+
+---
+
+# Implementation Notes
+
+✓ **on(eventName, listener)** — Registers listeners, returns `this` for chaining  
+✓ **emit(eventName, ...args)** — Invokes all listeners for an event with provided arguments  
+✓ **off(eventName, listener)** — Removes a specific listener, cleans up empty event entries  
+✓ **Data structure** — Map<string, Function[]> satisfies constraint node_002 with O(1) lookup and efficient removal  
+✓ **Input validation** — Type checks prevent non-string event names and non-function listeners  
+✓ **Memory management** — Deletes empty event entries to prevent memory leaks  
+
+**Task complete.** The EventEmitter is fully functional with all three required methods.

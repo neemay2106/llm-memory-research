@@ -1,0 +1,56 @@
+{
+  "task_metadata": {
+    "current_task": "Implement on(eventName, listener) method to register event listeners",
+    "completion_pct": 0.0,
+    "status": "Implementing listener registration with method chaining support"
+  },
+  "nodes": [
+    {
+      "type": "decision",
+      "node_id": "node_001",
+      "description": "Create EventEmitter class with on, emit, and off methods to allow event-driven communication",
+      "rationale": "The task requires implementing a standard event emitter pattern. A class-based approach provides an encapsulated, reusable solution with clear method APIs for registering listeners, triggering events, and removing listeners.",
+      "task_state": "Starting implementation of EventEmitter class with core methods"
+    },
+    {
+      "type": "constraint",
+      "node_id": "node_002",
+      "constraint_type": "architectural",
+      "severity": "high",
+      "status": "open",
+      "description": "Event listeners must be stored in a data structure that allows efficient addition, removal, and iteration",
+      "rationale": "The off method requires O(n) removal capability, while on and emit need efficient storage access. Using a Map or array of listeners per event name provides the necessary performance characteristics for these operations.",
+      "source": "environment_limitation"
+    },
+    {
+      "type": "decision",
+      "node_id": "node_003",
+      "description": "Use a Map data structure with event names as keys and arrays of listener functions as values",
+      "rationale": "A Map provides O(1) lookup by event name, while arrays allow efficient push/pop operations for adding listeners and linear search for removal. This is a standard approach balancing simplicity and performance.",
+      "task_state": "Designing listener storage mechanism using Map<string, Function[]>"
+    },
+    {
+      "type": "decision",
+      "node_id": "node_004",
+      "description": "Implement on(eventName, listener) method to register event listeners",
+      "rationale": "The on method is a core requirement. It should accept an event name string and a callback function, storing the listener for later invocation. It should return 'this' to support method chaining.",
+      "task_state": "Implementing listener registration with method chaining support"
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "edge_001",
+      "source_node_id": "node_001",
+      "target_node_id": "node_002",
+      "relationship_type": "was_constrained_by",
+      "rationale": "The EventEmitter design is constrained by the need for efficient listener storage and removal, which influences the choice of data structure for maintaining the listener registry."
+    },
+    {
+      "edge_id": "edge_002",
+      "source_node_id": "node_003",
+      "target_node_id": "node_004",
+      "relationship_type": "implements",
+      "rationale": "The on method implements the listener registration pattern using the Map data structure previously designed for storing listeners by event name."
+    }
+  ]
+}

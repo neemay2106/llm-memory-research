@@ -1,0 +1,258 @@
+# Startup Sequence
+
+## 1. Reading and Confirming Understanding
+
+I have read the handoff document in full. Here is my confirmation:
+
+**I am continuing implementation of a context manager for timing code blocks with per-label summary reporting.** The previous agent completed the architectural decisions but did not implement any code. **I am starting from scratch, implementing the `__exit__` method to calculate elapsed time and accumulate timing data, then completing the full context manager class and a summary report method.** The immediate next action is to implement the complete `TimingContextManager` class with all four methods (`__init__`, `__enter__`, `__exit__`, and a class method for reporting), then write tests to verify functionality.
+
+---
+
+## 2. Graph Reasoning & Decision Trace
+
+Reading the documented decisions as nodes:
+
+- **Node: Class-level dictionary storage** → Connected to class-level design choice  
+- **Node: Instance-level start_time tracking** → Connected to __enter__ capture point  
+- **Node: __init__ accepts label** → Connected to per-label identification  
+- **Node: __exit__ calculates & accumulates** → This is where I begin; it depends on all above
+
+**Key edges:**
+1. `__init__(label)` → stores label as instance variable → enables tracking which code block
+2. `__enter__` → captures start_time → provides baseline for elapsed calculation
+3. `__exit__` → subtracts start_time from current time → accumulates in class-level dict keyed by label
+4. Class-level dict → persists across instances → enables per-label summaries across multiple uses
+
+**Constraints active:**
+- No architectural decisions contradict the approach.
+- No prior work exists to preserve.
+- Continuation point is explicit: implement __exit__ timing/accumulation, then complete the class.
+
+---
+
+## 3. Risk Assessment
+
+**No high-severity risks detected.** The design is sound:
+- Class-level dictionary is a standard pattern for shared state across instances.
+- Capturing start_time in __enter__ is the correct interception point.
+- Accumulating (summing) totals rather than replacing is the correct behavior for per-label summaries.
+
+---
+
+## 4. Implementation
+
+I will now implement the complete context manager class and a summary method.
+
+```python
+import time
+from typing import Dict
+
+class TimingContextManager:
+    """
+    Context manager that times code blocks and produces per-label summary reports.
+    
+    Usage:
+        with TimingContextManager("block_1"):
+            # code to time
+            pass
+        
+        TimingContextManager.report()
+    """
+    
+    # Class-level dictionary to accumulate timing data across all instances
+    _timings: Dict[str, float] = {}
+    
+    def __init__(self, label: str) -> None:
+        """
+        Initialize the context manager with a label.
+        
+        Args:
+            label: Identifier for the code block being timed
+        """
+        self.label = label
+        self.start_time: float = None
+    
+    def __enter__(self):
+        """
+        Enter the context: record the start time.
+        
+        Returns:
+            self: The context manager instance
+        """
+        self.start_time = time.perf_counter()
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """
+        Exit the context: calculate elapsed time and accumulate under the label.
+        
+        Args:
+            exc_type: Exception type (if any)
+            exc_val: Exception value (if any)
+            exc_tb: Exception traceback (if any)
+        """
+        elapsed_time = time.perf_counter() - self.start_time
+        
+        if self.label not in self._timings:
+            self._timings[self.label] = 0.0
+        
+        self._timings[self.label] += elapsed_time
+    
+    @classmethod
+    def report(cls, verbose: bool = False) -> Dict[str, float]:
+        """
+        Generate and return a per-label summary report of accumulated timing data.
+        
+        Args:
+            verbose: If True, also print the report to stdout
+        
+        Returns:
+            Dictionary mapping labels to total accumulated time in seconds
+        """
+        if verbose:
+            print("\n" + "=" * 60)
+            print("TIMING SUMMARY REPORT")
+            print("=" * 60)
+            if not cls._timings:
+                print("No timing data recorded.")
+            else:
+                for label, total_time in sorted(cls._timings.items()):
+                    print(f"  {label:<30} {total_time:.6f}s")
+            print("=" * 60 + "\n")
+        
+        return dict(cls._timings)
+    
+    @classmethod
+    def reset(cls) -> None:
+        """
+        Clear all accumulated timing data.
+        Useful for resetting between test runs or reporting cycles.
+        """
+        cls._timings.clear()
+
+
+if __name__ == "__main__":
+    # Example usage
+    import time as time_module
+    
+    # Test 1: Single label, single use
+    with TimingContextManager("task_1"):
+        time_module.sleep(0.1)
+    
+    # Test 2: Same label used multiple times (should accumulate)
+    with TimingContextManager("task_2"):
+        time_module.sleep(0.05)
+    
+    with TimingContextManager("task_2"):
+        time_module.sleep(0.05)
+    
+    # Test 3: Another label
+    with TimingContextManager("task_3"):
+        time_module.sleep(0.02)
+    
+    # Generate and display report
+    TimingContextManager.report(verbose=True)
+```
+
+---
+
+## 5. Test Suite
+
+```python
+import unittest
+import time
+
+
+class TestTimingContextManager(unittest.TestCase):
+    """Unit tests for TimingContextManager"""
+    
+    def setUp(self):
+        """Reset timing data before each test"""
+        TimingContextManager.reset()
+    
+    def test_single_block_timing(self):
+        """Test that a single block is timed correctly"""
+        sleep_duration = 0.05
+        with TimingContextManager("test_block"):
+            time.sleep(sleep_duration)
+        
+        report = TimingContextManager.report()
+        self.assertIn("test_block", report)
+        self.assertGreaterEqual(report["test_block"], sleep_duration * 0.9)  # Allow 10% margin
+    
+    def test_multiple_uses_same_label_accumulate(self):
+        """Test that multiple uses of the same label accumulate time"""
+        sleep_duration = 0.02
+        
+        with TimingContextManager("accumulated"):
+            time.sleep(sleep_duration)
+        
+        with TimingContextManager("accumulated"):
+            time.sleep(sleep_duration)
+        
+        report = TimingContextManager.report()
+        total = report["accumulated"]
+        self.assertGreaterEqual(total, sleep_duration * 2 * 0.9)  # Allow 10% margin
+    
+    def test_multiple_labels(self):
+        """Test that different labels are tracked separately"""
+        with TimingContextManager("label_a"):
+            time.sleep(0.02)
+        
+        with TimingContextManager("label_b"):
+            time.sleep(0.04)
+        
+        report = TimingContextManager.report()
+        self.assertIn("label_a", report)
+        self.assertIn("label_b", report)
+        self.assertLess(report["label_a"], report["label_b"])
+    
+    def test_report_returns_dict(self):
+        """Test that report() returns a dictionary"""
+        with TimingContextManager("test"):
+            time.sleep(0.01)
+        
+        report = TimingContextManager.report()
+        self.assertIsInstance(report, dict)
+        self.assertIn("test", report)
+    
+    def test_context_manager_returns_self(self):
+        """Test that __enter__ returns the context manager itself"""
+        with TimingContextManager("test") as ctx:
+            self.assertIsInstance(ctx, TimingContextManager)
+            self.assertEqual(ctx.label, "test")
+    
+    def test_reset_clears_data(self):
+        """Test that reset() clears all timing data"""
+        with TimingContextManager("test"):
+            time.sleep(0.01)
+        
+        TimingContextManager.reset()
+        report = TimingContextManager.report()
+        self.assertEqual(len(report), 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+---
+
+## 6. Summary of Implementation
+
+✅ **Implemented:**
+- `__init__(label)`: Stores the label and initializes start_time  
+- `__enter__()`: Captures current time using `time.perf_counter()` (high precision)  
+- `__exit__()`: Calculates elapsed time and accumulates into class-level `_timings` dict  
+- `report(verbose=False)`: Returns dict summary; optionally prints formatted report  
+- `reset()`: Clears accumulated data for fresh runs  
+- Full example usage demonstrating multiple labels and accumulation  
+- Comprehensive test suite (6 tests covering all core functionality)  
+
+**Key design choices aligned with handoff:**
+- Class-level `_timings` dict persists across instances (per handoff decision)
+- Accumulation via `+=` supports same label used multiple times
+- `time.perf_counter()` provides high-resolution timing independent of system clock
+- `verbose` parameter in `report()` provides both programmatic and human-readable output
+
+The implementation is **complete and ready for use.**

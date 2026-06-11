@@ -1,0 +1,53 @@
+{
+  "task_metadata": {
+    "current_task": "In __exit__, calculate elapsed time and accumulate it in the class-level timings dictionary under the label",
+    "completion_pct": 0.0,
+    "status": "Implementing context manager exit and timing accumulation logic"
+  },
+  "nodes": [
+    {
+      "type": "decision",
+      "node_id": "node_001",
+      "description": "Design context manager class structure for timing code blocks with per-label summary reporting",
+      "rationale": "A context manager is the most Pythonic way to handle timing code blocks, using __enter__ and __exit__ methods. We need to support multiple labels to track different code sections, and accumulate timing data for per-label summaries.",
+      "task_state": "Starting implementation of context manager for code block timing"
+    },
+    {
+      "type": "decision",
+      "node_id": "node_002",
+      "description": "Use class-level dictionary to store accumulated timing data indexed by label, and instance-level tracking of current block start time",
+      "rationale": "Class-level storage allows summaries to persist across multiple context manager uses. Instance-level start_time tracks the current block being timed. This enables the same label to be used multiple times and accumulate durations.",
+      "task_state": "Designing data structures for timing accumulation and summary reporting"
+    },
+    {
+      "type": "decision",
+      "node_id": "node_003",
+      "description": "Implement __init__ method that accepts a label parameter and records start time in __enter__",
+      "rationale": "The label identifies which code block is being timed, and capturing the start time in __enter__ ensures we measure from the exact point the context is entered, before user code runs.",
+      "task_state": "Implementing context manager entry and initialization"
+    },
+    {
+      "type": "decision",
+      "node_id": "node_004",
+      "description": "In __exit__, calculate elapsed time and accumulate it in the class-level timings dictionary under the label",
+      "rationale": "__exit__ runs after the user code completes, so we can calculate the actual elapsed time. Accumulating rather than replacing allows multiple uses of the same label to contribute to a total.",
+      "task_state": "Implementing context manager exit and timing accumulation logic"
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "edge_001",
+      "source_node_id": "node_002",
+      "target_node_id": "node_001",
+      "relationship_type": "follows",
+      "rationale": "Data structure design decisions follow from the overall context manager design pattern. The storage approach implements the architecture established in node_001."
+    },
+    {
+      "edge_id": "edge_002",
+      "source_node_id": "node_004",
+      "target_node_id": "node_003",
+      "relationship_type": "follows",
+      "rationale": "Exit logic follows from entry logic. The __exit__ method must work with data set up in __init__ and __enter__ to calculate and record elapsed time."
+    }
+  ]
+}

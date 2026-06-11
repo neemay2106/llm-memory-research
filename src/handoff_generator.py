@@ -16,7 +16,7 @@ def constraint(graph):
     nodes = graph["nodes"]
     for node in nodes:
         if node["type"] == "constraint":
-            if node["status"] == "open":
+            if node.get("status", "open") == "open":
                 constraint_nodes.append(node)
     return constraint_nodes
 

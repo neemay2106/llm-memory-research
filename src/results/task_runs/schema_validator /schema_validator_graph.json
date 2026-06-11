@@ -1,0 +1,59 @@
+{
+  "task_metadata": {
+    "current_task": "Implement type coercion handlers for common CSV types: string, number, boolean, date, and optional custom coercers",
+    "completion_pct": 0.0,
+    "status": "Designing type coercion mechanism"
+  },
+  "nodes": [
+    {
+      "type": "decision",
+      "node_id": "node_001",
+      "description": "Define core validator architecture with schema definition, type coercion rules, and error accumulation mechanism",
+      "rationale": "A CSV validator needs to support multiple column types with flexible parsing, catch all errors rather than failing fast, and clearly communicate validation failures to users. This requires separating schema definition from validation logic.",
+      "task_state": "Planning validator architecture and core components"
+    },
+    {
+      "type": "constraint",
+      "node_id": "node_002",
+      "constraint_type": "architectural",
+      "severity": "high",
+      "status": "open",
+      "description": "Must accumulate all validation errors rather than failing on first error to provide comprehensive feedback",
+      "rationale": "CSV validation often processes large files. Users need to see all problems at once to fix them efficiently rather than discovering errors iteratively.",
+      "source": "user_prompt"
+    },
+    {
+      "type": "decision",
+      "node_id": "node_003",
+      "description": "Implement type coercion handlers for common CSV types: string, number, boolean, date, and optional custom coercers",
+      "rationale": "CSV data comes as strings. Type coercion transforms these strings into appropriate types (e.g., \"123\" -> 123, \"true\" -> true). Supporting common types handles most use cases while allowing custom extensions.",
+      "task_state": "Designing type coercion mechanism"
+    },
+    {
+      "type": "constraint",
+      "node_id": "node_004",
+      "constraint_type": "performance",
+      "severity": "moderate",
+      "status": "open",
+      "description": "Type coercion must be efficient to handle large CSV files without significant performance degradation",
+      "rationale": "CSV files can contain thousands to millions of rows. Coercion logic runs on every field; inefficient parsing would make the validator unusable for large datasets.",
+      "source": "environment_limitation"
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "edge_001",
+      "source_node_id": "node_001",
+      "target_node_id": "node_002",
+      "relationship_type": "was_constrained_by",
+      "rationale": "The validator architecture must be designed around the core requirement of accumulating errors rather than failing fast, which shapes the overall design approach."
+    },
+    {
+      "edge_id": "edge_002",
+      "source_node_id": "node_003",
+      "target_node_id": "node_004",
+      "relationship_type": "was_constrained_by",
+      "rationale": "The type coercion implementation must use efficient algorithms and parsing strategies to meet performance requirements for large files."
+    }
+  ]
+}
